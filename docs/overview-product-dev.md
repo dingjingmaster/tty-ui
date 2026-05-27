@@ -3,7 +3,7 @@
 > 文档元数据
 > - 文档版本：v1.0.0
 > - 最后更新：2026-05-27
-> - 更新来源：docs/dev/1-task-diskcrypt-kms-ui.md、docs/dev/4-task-embed-font-static-freetype.md、docs/dev/5-task-trim-runtime-deps.md、docs/dev/6-summary-drm-dumb-buffer.md、docs/dev/7-summary-embedded-bitmap-font.md、docs/dev/8-summary-embedded-drm-ioctl.md
+> - 更新来源：docs/dev/1-task-diskcrypt-kms-ui.md、docs/dev/4-task-embed-font-static-freetype.md、docs/dev/5-task-trim-runtime-deps.md、docs/dev/6-summary-drm-dumb-buffer.md、docs/dev/7-summary-embedded-bitmap-font.md、docs/dev/8-summary-embedded-drm-ioctl.md、docs/dev/9-task-static-libc.md
 > - 关联产品文档：docs/overview-product.md
 
 ## 1. 技术栈
@@ -11,12 +11,12 @@
 | 类别 | 技术/版本 | 用途 | 备注 |
 |------|-----------|------|------|
 | 语言 | C11 | 主程序实现 | `src/main.c` |
-| 构建系统 | Make | 本地构建 | 产物为 `build/tty-ui`；`make font-atlas` 开发期目标使用 pkg-config |
+| 构建系统 | Make | 本地构建 | 产物为 `build/tty-ui`；默认 `STATIC=1` 静态链接 libc；`make font-atlas` 开发期目标使用 pkg-config |
 | 运行平台 | Linux DRM/KMS | 无 GUI 图形输出 | 需要 `/dev/dri/card*` 与 DRM master |
 | 内嵌封装 | `src/kms_drm.c`、`src/kms_drm.h` | DRM/KMS 模式设置、dumb buffer、page flip | 直接调用 Linux DRM ioctl，不链接 `libdrm` |
 | 内嵌资源 | `src/font_atlas.c`、`src/font_atlas.h` | 中文/英文位图字形表 | 默认构建直接编译进 `build/tty-ui` |
 | 开发工具 | `tools/generate_font_atlas.c` | 从 `fonts/wqy-microhei.ttc` 重新生成字形表 | 仅运行 `make font-atlas` 时需要 `freetype2` |
-| 运行依赖 | libc | 主程序直接动态依赖 | `ld-linux`/`linux-vdso` 为基础 ELF 运行环境 |
+| 运行依赖 | 无外部共享库 | 主程序静态链接 libc | 仍需要 Linux 内核、DRM 设备和 DRM master 权限 |
 
 ## 2. 架构边界
 
@@ -49,11 +49,12 @@
 | DRM UAPI | ioctl 结构体布局、双阶段资源查询、page flip 事件处理 | 构建检查、人工审查、依赖检查 | docs/dev/8-summary-embedded-drm-ioctl.md |
 | 内存/生命周期 | DRM FB、dumb buffer mmap、字形 bitmap 边界检查 | 构建检查、人工审查错误路径 | docs/dev/7-summary-embedded-bitmap-font.md |
 | 权限/系统调用 | 打开 DRM 设备、设置 CRTC、page flip | 不在桌面会话实机运行；README 说明运行前提 | docs/dev/1-task-diskcrypt-kms-ui.md |
-| 构建链接 | 内嵌 DRM ioctl 封装、内嵌位图字形表、可选开发期字形生成器 | `make`、`ldd build/tty-ui`、`readelf -d build/tty-ui` | docs/dev/8-summary-embedded-drm-ioctl.md |
+| 构建链接 | 静态 libc、内嵌 DRM ioctl 封装、内嵌位图字形表、可选开发期字形生成器 | `make`、`file build/tty-ui`、`readelf -d build/tty-ui` | docs/dev/9-task-static-libc.md |
 
 ## 6. 构建与验证
 
 - 构建命令：`make`
+- 静态链接：默认 `STATIC=1`，主程序链接参数为 `-static -no-pie`；可用 `make STATIC=0` 构建动态链接调试版本。
 - DRM/KMS 封装：`make` 直接编译 `src/kms_drm.c`，默认构建不依赖 `libdrm` 头文件、`pkg-config libdrm` 或 `-ldrm`。
 - 字形打包：`make` 直接编译已生成的 `src/font_atlas.c`，默认构建不依赖 `freetype2` 或 `libfreetype.a`。
 - 字形生成：更换字体、文案或字号时运行 `make font-atlas`，该开发期目标使用 `tools/generate_font_atlas.c` 和 `freetype2` 重新生成 `src/font_atlas.c`/`src/font_atlas.h`。
@@ -97,3 +98,4 @@
 | 2026-05-27 | 从 GBM/EGL/GLES 切换到 DRM dumb buffer + CPU 绘制 | 运行依赖收敛到 `libdrm` 和 `libc` | docs/dev/6-summary-drm-dumb-buffer.md |
 | 2026-05-27 | 改为内嵌位图字形表 | 默认构建和主程序不再依赖 `libfreetype.a` | docs/dev/7-summary-embedded-bitmap-font.md |
 | 2026-05-27 | 改为项目内 DRM ioctl 封装 | 主程序不再依赖 `libdrm.so.2`，直接动态依赖仅 `libc` | docs/dev/8-summary-embedded-drm-ioctl.md |
+| 2026-05-27 | 默认静态链接 libc | 主程序不再依赖 `libc.so.6` 或动态加载器 | docs/dev/9-task-static-libc.md |

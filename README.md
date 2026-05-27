@@ -6,19 +6,26 @@
 
 ## 构建
 
-默认构建需要 C 编译器、`make` 和基础 libc 头文件，不需要 `libdrm` 开发包。
+默认构建需要 C 编译器、`make`、基础 libc 头文件和静态 libc，不需要
+`libdrm` 开发包。
 
 默认构建使用 `src/font_atlas.c` 中的内嵌位图字形表，不依赖系统字体文件、
 Fontconfig、FreeType 或 `libfreetype.a`。
 
-DRM/KMS 功能通过项目内最小 ioctl 封装保留，运行时动态依赖目标为基础
-C 运行时。
+DRM/KMS 功能通过项目内最小 ioctl 封装保留。默认产物静态链接 libc，
+不依赖 `libc.so.6` 或其它共享库。
 
 ```sh
 make
 ```
 
 产物位于 `build/tty-ui`。
+
+如果构建机缺少静态 libc，或需要动态链接调试版本，可使用：
+
+```sh
+make STATIC=0
+```
 
 如果更换 `fonts/wqy-microhei.ttc`、调整界面文案或新增字号，需要在开发机安装
 `freetype2` 后重新生成字形表：
