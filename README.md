@@ -1,17 +1,14 @@
 # tty UI绘制例子
 
 这个界面可以运行在非图形 GUI 环境下，比如 initramfs。实现方式参考
-`kmscube` 的裸机图形链路：DRM/KMS + GBM + EGL + OpenGL ES 2.0，不依赖
-X11、Wayland 或桌面 compositor。
+裸 KMS 思路：直接使用 DRM/KMS 设置显示模式，用 DRM dumb buffer 和 CPU
+软件绘制界面，不依赖 X11、Wayland、GBM、EGL、GLES 或桌面 compositor。
 
 ## 构建
 
 需要开发包：
 
 - `libdrm`
-- `gbm`
-- `egl`
-- `glesv2`
 - `freetype2`
 
 构建时会把 `fonts/wqy-microhei.ttc` 打包进二进制，并优先静态链接
@@ -19,6 +16,8 @@ X11、Wayland 或桌面 compositor。
 `libfreetype.so`。当前内嵌字体不需要 FreeType 的可选 PNG/压缩字体路径，
 构建中会禁用这些路径以避免运行时依赖 `libbz2`、`libpng16`、`libz` 和
 `libbrotli*`。
+
+运行时动态依赖目标为 `libdrm.so` 和基础 C 运行时。
 
 ```sh
 make

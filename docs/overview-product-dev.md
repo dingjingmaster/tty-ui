@@ -3,7 +3,7 @@
 > 文档元数据
 > - 文档版本：v1.0.0
 > - 最后更新：2026-05-27
-> - 更新来源：docs/dev/1-task-diskcrypt-kms-ui.md、docs/dev/4-task-embed-font-static-freetype.md、docs/dev/5-task-trim-runtime-deps.md
+> - 更新来源：docs/dev/1-task-diskcrypt-kms-ui.md、docs/dev/4-task-embed-font-static-freetype.md、docs/dev/5-task-trim-runtime-deps.md、docs/dev/6-summary-drm-dumb-buffer.md
 > - 关联产品文档：docs/overview-product.md
 
 ## 1. 技术栈
@@ -13,19 +13,19 @@
 | 语言 | C11 | 主程序实现 | `src/main.c` |
 | 构建系统 | Make + pkg-config | 本地构建 | 产物为 `build/tty-ui` |
 | 运行平台 | Linux DRM/KMS | 无 GUI 图形输出 | 需要 `/dev/dri/card*` 与 DRM master |
-| 关键依赖 | libdrm、GBM、EGL、GLESv2 | 裸显示链路和 GPU 绘制 | 与 kmscube 技术栈一致 |
+| 关键依赖 | libdrm | DRM/KMS 模式设置、dumb buffer、page flip | 运行时不再依赖 GBM/EGL/GLES |
 | 关键依赖 | FreeType | 中文/英文文字栅格化 | 构建优先链接 `libfreetype.a`，运行时不依赖 `libfreetype.so` |
 | 内嵌资源 | `fonts/wqy-microhei.ttc` | 默认中文字体 | 通过 linker binary object 打包进 `build/tty-ui` |
-| 运行依赖 | libdrm、libgbm、libEGL、libGLESv2、libc | 主程序直接动态依赖 | `libexpat`、`libm`、`libGLdispatch` 来自图形库传递依赖 |
+| 运行依赖 | libdrm、libc | 主程序直接动态依赖 | `ld-linux`/`linux-vdso` 为基础 ELF 运行环境 |
 
 ## 2. 架构边界
 
-- 模块划分：当前为单文件最小实现，内部按 DRM、GBM、EGL、GLES 绘制、字体渲染、键盘输入分区。
+- 模块划分：当前为单文件最小实现，内部按 DRM/KMS、dumb buffer、CPU 绘制、字体渲染、键盘输入分区。
 - 进程/线程/内核边界：单进程单线程；通过 libdrm 调用内核 DRM/KMS；不创建后台线程。
 - 客户端/服务端/驱动边界：程序作为 DRM client 直接提交 CRTC mode set 和 page flip。
-- 数据流：键盘输入更新内存中的 UI 状态；UI 状态被渲染为 GLES 图形；GBM buffer 交给 KMS 显示。
-- 控制流：初始化 DRM/GBM/EGL -> 渲染首帧 -> 等待键盘事件 -> 状态变化后重绘并 page flip -> 退出时尝试恢复旧 CRTC。
-- 外部依赖：DRM 设备、EGL/GLES 驱动；字体已打包进二进制。
+- 数据流：键盘输入更新内存中的 UI 状态；UI 状态由 CPU 写入 mmap 后的 XRGB8888 dumb buffer；buffer 交给 KMS 显示。
+- 控制流：初始化 DRM/KMS 和 dumb buffer -> CPU 渲染首帧 -> 等待键盘事件 -> 状态变化后重绘并 page flip -> 退出时尝试恢复旧 CRTC。
+- 外部依赖：DRM 设备；字体已打包进二进制。
 
 ## 3. 关键接口
 
@@ -36,7 +36,7 @@
 
 ## 4. 数据与配置
 
-- 核心数据结构：`display` 管理 DRM/GBM/EGL/GLES 资源；`ui_state` 管理用户名、密码和焦点。
+- 核心数据结构：`display` 管理 DRM/KMS、dumb buffer 和 FreeType 资源；`ui_state` 管理用户名、密码和焦点。
 - 配置文件/参数：无配置文件；命令行参数为 `-D`。
 - 持久化数据：无。
 - 迁移/兼容规则：无历史数据迁移。
@@ -46,9 +46,9 @@
 
 | 风险区域 | 关注点 | 验证方式 | 关联文档 |
 |----------|--------|----------|----------|
-| 内存/生命周期 | DRM FB、GBM BO、EGL context、FreeType face 的释放顺序 | 构建检查、人工审查错误路径 | docs/dev/1-task-diskcrypt-kms-ui.md |
+| 内存/生命周期 | DRM FB、dumb buffer mmap、FreeType face 的释放顺序 | 构建检查、人工审查错误路径 | docs/dev/6-summary-drm-dumb-buffer.md |
 | 权限/系统调用 | 打开 DRM 设备、设置 CRTC、page flip | 不在桌面会话实机运行；README 说明运行前提 | docs/dev/1-task-diskcrypt-kms-ui.md |
-| 构建链接 | pkg-config 依赖、内嵌字体对象、FreeType 静态链接参数、可选压缩/PNG 路径 stub | `make`、`ldd build/tty-ui`、`readelf -d build/tty-ui` | docs/dev/5-task-trim-runtime-deps.md |
+| 构建链接 | libdrm、内嵌字体对象、FreeType 静态链接参数、可选压缩/PNG 路径 stub | `make`、`ldd build/tty-ui`、`readelf -d build/tty-ui` | docs/dev/6-summary-drm-dumb-buffer.md |
 
 ## 6. 构建与验证
 
@@ -73,9 +73,9 @@
 
 ## 8. 观测与排障
 
-- 关键日志：初始化失败、DRM/GBM/EGL 错误、输入读取错误会输出到 stderr。
+- 关键日志：初始化失败、DRM dumb buffer/KMS 错误、输入读取错误会输出到 stderr。
 - 指标/告警：无。
-- 常见故障：无 DRM 权限、无 connected connector、EGL 无法绑定 GBM。
+- 常见故障：无 DRM 权限、无 connected connector、驱动不支持 dumb buffer、无法获得 DRM master。
 - 排障入口：先确认 `build/tty-ui -h` 可用，再在目标 TTY 检查 `/dev/dri/card*` 权限。
 
 ## 9. 文档索引
@@ -93,3 +93,4 @@
 | 2026-05-27 | 新增裸 KMS UI 技术栈、构建和验证约定 | 确立项目当前实现架构 | docs/dev/1-task-diskcrypt-kms-ui.md |
 | 2026-05-27 | 内嵌默认字体，移除 Fontconfig/`-f`，优先静态链接 FreeType | 降低 initramfs 运行时依赖 | docs/dev/4-task-embed-font-static-freetype.md |
 | 2026-05-27 | 禁用 FreeType 可选压缩/PNG 路径 | 移除 `libbz2`、`libpng16`、`libz`、`libbrotli*` 运行时依赖 | docs/dev/5-task-trim-runtime-deps.md |
+| 2026-05-27 | 从 GBM/EGL/GLES 切换到 DRM dumb buffer + CPU 绘制 | 运行依赖收敛到 `libdrm` 和 `libc` | docs/dev/6-summary-drm-dumb-buffer.md |

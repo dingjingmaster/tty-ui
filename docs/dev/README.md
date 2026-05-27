@@ -20,3 +20,6 @@
 | 3 | 2026-05-27 | L2 | task | [3-task-remove-header-accent.md](3-task-remove-header-accent.md) | 已完成 | 移除“安得合众”下方的蓝色装饰横线。 |
 | 4 | 2026-05-27 | L2 | task | [4-task-embed-font-static-freetype.md](4-task-embed-font-static-freetype.md) | 已完成 | 内嵌 `fonts/wqy-microhei.ttc`，移除 `-f`/Fontconfig，并静态链接 FreeType。 |
 | 5 | 2026-05-27 | L2 | task | [5-task-trim-runtime-deps.md](5-task-trim-runtime-deps.md) | 已完成 | 裁剪 FreeType 可选压缩/PNG 动态依赖。 |
+| 6 | 2026-05-27 | L3 | research | [6-research-drm-dumb-buffer.md](6-research-drm-dumb-buffer.md) | 已完成 | 调研切换到 DRM dumb buffer + CPU 软件绘制。 |
+| 6 | 2026-05-27 | L3 | plan | [6-plan-drm-dumb-buffer.md](6-plan-drm-dumb-buffer.md) | 已完成 | 规划替换 GBM/EGL/GLES 渲染层并收敛依赖。 |
+| 6 | 2026-05-27 | L3 | summary | [6-summary-drm-dumb-buffer.md](6-summary-drm-dumb-buffer.md) | 已完成 | 总结 DRM dumb buffer + CPU 绘制架构变更。 |

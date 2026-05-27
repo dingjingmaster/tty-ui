@@ -10,7 +10,7 @@ RUNTIME_STUB_SOURCES := src/freetype_optional_stubs.c
 OBJECTS := $(SOURCES:src/%.c=$(BUILD_DIR)/%.o) $(RUNTIME_STUB_SOURCES:src/%.c=$(BUILD_DIR)/%.o)
 FONT_FILE := fonts/wqy-microhei.ttc
 FONT_OBJECT := $(BUILD_DIR)/wqy-microhei-font.o
-PKGS := libdrm gbm egl glesv2
+PKGS := libdrm
 FREETYPE_CFLAGS := $(shell $(PKG_CONFIG) --cflags freetype2)
 FREETYPE_LIBDIR := $(shell $(PKG_CONFIG) --variable=libdir freetype2)
 FREETYPE_STATIC := $(FREETYPE_LIBDIR)/libfreetype.a
