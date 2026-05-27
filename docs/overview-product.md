@@ -3,7 +3,7 @@
 > 文档元数据
 > - 文档版本：v1.0.0
 > - 最后更新：2026-05-27
-> - 更新来源：docs/dev/1-task-diskcrypt-kms-ui.md、docs/dev/4-task-embed-font-static-freetype.md、docs/dev/6-summary-drm-dumb-buffer.md、docs/dev/7-summary-embedded-bitmap-font.md
+> - 更新来源：docs/dev/1-task-diskcrypt-kms-ui.md、docs/dev/4-task-embed-font-static-freetype.md、docs/dev/6-summary-drm-dumb-buffer.md、docs/dev/7-summary-embedded-bitmap-font.md、docs/dev/8-summary-embedded-drm-ioctl.md
 
 ## 1. 产品定位
 
@@ -39,7 +39,7 @@
 - 权限规则：运行环境必须允许程序打开 `/dev/dri/card*` 并获得 DRM master。
 - 状态流转：用户名 -> 密码 -> 继续启动 -> 退出，Tab 循环切换。
 - 异常处理：Esc 或退出按钮返回非 0；显示初始化失败时程序直接退出。
-- 兼容约束：目标运行环境不依赖桌面 GUI；位图字形表已打包进二进制，显示路径只需要 DRM/KMS dumb buffer。
+- 兼容约束：目标运行环境不依赖桌面 GUI；位图字形表已打包进二进制，显示路径使用 Linux DRM/KMS dumb buffer，不需要 `libdrm.so`。
 - 用户可见行为：密码只显示掩码字符，不在界面回显明文。
 
 ## 6. 非功能要求
@@ -63,3 +63,4 @@
 | 2026-05-27 | 内嵌默认中文字体并移除外部字体参数 | 降低目标运行环境字体依赖 | docs/dev/4-task-embed-font-static-freetype.md |
 | 2026-05-27 | 切换为 DRM dumb buffer + CPU 绘制 | 去掉 GBM/EGL/GLES 运行依赖 | docs/dev/6-summary-drm-dumb-buffer.md |
 | 2026-05-27 | 使用内嵌位图字形表显示文字 | 默认构建不再依赖 `libfreetype.a` | docs/dev/7-summary-embedded-bitmap-font.md |
+| 2026-05-27 | 使用项目内 DRM ioctl 封装 | 去掉 `libdrm.so` 运行依赖并保留 DRM/KMS 功能 | docs/dev/8-summary-embedded-drm-ioctl.md |

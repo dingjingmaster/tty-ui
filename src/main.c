@@ -13,11 +13,8 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include <drm.h>
-#include <xf86drm.h>
-#include <xf86drmMode.h>
-
 #include "font_atlas.h"
+#include "kms_drm.h"
 
 #define DEFAULT_DRM_DEVICE "/dev/dri/card0"
 #define INPUT_LIMIT 128
@@ -42,8 +39,8 @@ struct display {
 	int fd;
 	uint32_t connector_id;
 	uint32_t crtc_id;
-	drmModeModeInfo mode;
-	drmModeCrtc *old_crtc;
+	struct kms_mode_info mode;
+	struct kms_crtc *old_crtc;
 	struct drm_buffer buffers[BUFFER_COUNT];
 	int width;
 	int height;
@@ -378,8 +375,8 @@ static int draw_text_centered(struct canvas *canvas, const char *text,
 			 pixel_size, color);
 }
 
-static uint32_t find_crtc_for_encoder(const drmModeRes *resources,
-				      const drmModeEncoder *encoder)
+static uint32_t find_crtc_for_encoder(const struct kms_resources *resources,
+				      const struct kms_encoder *encoder)
 {
 	for (int i = 0; i < resources->count_crtcs; i++) {
 		if (encoder->possible_crtcs & (1u << i))
@@ -388,17 +385,19 @@ static uint32_t find_crtc_for_encoder(const drmModeRes *resources,
 	return 0;
 }
 
-static uint32_t find_crtc_for_connector(int fd, const drmModeRes *resources,
-					const drmModeConnector *connector)
+static uint32_t find_crtc_for_connector(int fd,
+					const struct kms_resources *resources,
+					const struct kms_connector *connector)
 {
 	for (int i = 0; i < connector->count_encoders; i++) {
-		drmModeEncoder *encoder = drmModeGetEncoder(fd, connector->encoders[i]);
+		struct kms_encoder *encoder =
+			kms_get_encoder(fd, connector->encoders[i]);
 		uint32_t crtc_id = 0;
 
 		if (!encoder)
 			continue;
 		crtc_id = find_crtc_for_encoder(resources, encoder);
-		drmModeFreeEncoder(encoder);
+		kms_free_encoder(encoder);
 		if (crtc_id)
 			return crtc_id;
 	}
@@ -407,9 +406,9 @@ static uint32_t find_crtc_for_connector(int fd, const drmModeRes *resources,
 
 static int init_drm(struct display *display, const char *device)
 {
-	drmModeRes *resources = NULL;
-	drmModeConnector *connector = NULL;
-	drmModeEncoder *encoder = NULL;
+	struct kms_resources *resources = NULL;
+	struct kms_connector *connector = NULL;
+	struct kms_encoder *encoder = NULL;
 	int chosen_mode = -1;
 	int largest_mode = -1;
 	int largest_area = 0;
@@ -422,20 +421,21 @@ static int init_drm(struct display *display, const char *device)
 		return -1;
 	}
 
-	resources = drmModeGetResources(display->fd);
+	resources = kms_get_resources(display->fd);
 	if (!resources) {
-		fprintf(stderr, "drmModeGetResources failed: %s\n", strerror(errno));
+		fprintf(stderr, "kms_get_resources failed: %s\n", strerror(errno));
 		goto out;
 	}
 
 	for (int i = 0; i < resources->count_connectors; i++) {
-		connector = drmModeGetConnector(display->fd, resources->connectors[i]);
+		connector = kms_get_connector(display->fd,
+					      resources->connectors[i]);
 		if (!connector)
 			continue;
-		if (connector->connection == DRM_MODE_CONNECTED &&
+		if (connector->connection == KMS_MODE_CONNECTED &&
 		    connector->count_modes > 0)
 			break;
-		drmModeFreeConnector(connector);
+		kms_free_connector(connector);
 		connector = NULL;
 	}
 
@@ -447,7 +447,7 @@ static int init_drm(struct display *display, const char *device)
 	for (int i = 0; i < connector->count_modes; i++) {
 		int area = connector->modes[i].hdisplay * connector->modes[i].vdisplay;
 
-		if ((connector->modes[i].type & DRM_MODE_TYPE_PREFERRED) &&
+		if ((connector->modes[i].type & KMS_MODE_TYPE_PREFERRED) &&
 		    chosen_mode < 0)
 			chosen_mode = i;
 		if (area > largest_area) {
@@ -466,7 +466,7 @@ static int init_drm(struct display *display, const char *device)
 	display->height = display->mode.vdisplay;
 
 	if (connector->encoder_id)
-		encoder = drmModeGetEncoder(display->fd, connector->encoder_id);
+		encoder = kms_get_encoder(display->fd, connector->encoder_id);
 	if (encoder && encoder->crtc_id)
 		display->crtc_id = encoder->crtc_id;
 	else
@@ -478,16 +478,16 @@ static int init_drm(struct display *display, const char *device)
 		goto out;
 	}
 
-	display->old_crtc = drmModeGetCrtc(display->fd, display->crtc_id);
+	display->old_crtc = kms_get_crtc(display->fd, display->crtc_id);
 	ret = 0;
 
 out:
 	if (encoder)
-		drmModeFreeEncoder(encoder);
+		kms_free_encoder(encoder);
 	if (connector)
-		drmModeFreeConnector(connector);
+		kms_free_connector(connector);
 	if (resources)
-		drmModeFreeResources(resources);
+		kms_free_resources(resources);
 	if (ret && display->fd >= 0) {
 		close(display->fd);
 		display->fd = -1;
@@ -500,52 +500,38 @@ static void destroy_dumb_buffer(struct display *display, struct drm_buffer *buff
 	if (buffer->map && buffer->map != MAP_FAILED)
 		munmap(buffer->map, buffer->size);
 	if (buffer->fb_id)
-		drmModeRmFB(display->fd, buffer->fb_id);
-	if (buffer->handle) {
-		struct drm_mode_destroy_dumb destroy_req;
-
-		memset(&destroy_req, 0, sizeof(destroy_req));
-		destroy_req.handle = buffer->handle;
-		drmIoctl(display->fd, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy_req);
-	}
+		kms_mode_rm_fb(display->fd, buffer->fb_id);
+	if (buffer->handle)
+		kms_destroy_dumb_buffer(display->fd, buffer->handle);
 	memset(buffer, 0, sizeof(*buffer));
 }
 
 static int create_dumb_buffer(struct display *display, struct drm_buffer *buffer)
 {
-	struct drm_mode_create_dumb create_req;
-	struct drm_mode_map_dumb map_req;
+	uint64_t map_offset;
 	int ret;
 
 	memset(buffer, 0, sizeof(*buffer));
-	memset(&create_req, 0, sizeof(create_req));
-	create_req.width = (uint32_t)display->width;
-	create_req.height = (uint32_t)display->height;
-	create_req.bpp = 32;
-
-	ret = drmIoctl(display->fd, DRM_IOCTL_MODE_CREATE_DUMB, &create_req);
+	ret = kms_create_dumb_buffer(display->fd, (uint32_t)display->width,
+				     (uint32_t)display->height, 32,
+				     &buffer->handle, &buffer->pitch,
+				     &buffer->size);
 	if (ret) {
 		fprintf(stderr, "DRM_IOCTL_MODE_CREATE_DUMB failed: %s\n",
 			strerror(errno));
 		return -1;
 	}
 
-	buffer->handle = create_req.handle;
-	buffer->pitch = create_req.pitch;
-	buffer->size = create_req.size;
-
-	ret = drmModeAddFB(display->fd, (uint32_t)display->width,
-			   (uint32_t)display->height, 24, 32, buffer->pitch,
-			   buffer->handle, &buffer->fb_id);
+	ret = kms_mode_add_fb(display->fd, (uint32_t)display->width,
+			      (uint32_t)display->height, 24, 32,
+			      buffer->pitch, buffer->handle, &buffer->fb_id);
 	if (ret) {
-		fprintf(stderr, "drmModeAddFB failed: %s\n", strerror(errno));
+		fprintf(stderr, "kms_mode_add_fb failed: %s\n", strerror(errno));
 		destroy_dumb_buffer(display, buffer);
 		return -1;
 	}
 
-	memset(&map_req, 0, sizeof(map_req));
-	map_req.handle = buffer->handle;
-	ret = drmIoctl(display->fd, DRM_IOCTL_MODE_MAP_DUMB, &map_req);
+	ret = kms_map_dumb_buffer(display->fd, buffer->handle, &map_offset);
 	if (ret) {
 		fprintf(stderr, "DRM_IOCTL_MODE_MAP_DUMB failed: %s\n",
 			strerror(errno));
@@ -554,7 +540,7 @@ static int create_dumb_buffer(struct display *display, struct drm_buffer *buffer
 	}
 
 	buffer->map = mmap(NULL, buffer->size, PROT_READ | PROT_WRITE, MAP_SHARED,
-			   display->fd, (off_t)map_req.offset);
+			   display->fd, (off_t)map_offset);
 	if (buffer->map == MAP_FAILED) {
 		fprintf(stderr, "mmap dumb buffer failed: %s\n", strerror(errno));
 		destroy_dumb_buffer(display, buffer);
@@ -580,7 +566,7 @@ static void page_flip_handler(int fd, unsigned int frame, unsigned int sec,
 
 static int wait_for_page_flip(int fd, bool *waiting)
 {
-	drmEventContext event_context = {
+	struct kms_event_context event_context = {
 		.version = 2,
 		.page_flip_handler = page_flip_handler,
 	};
@@ -600,7 +586,7 @@ static int wait_for_page_flip(int fd, bool *waiting)
 			return -1;
 		}
 		if (FD_ISSET(fd, &fds))
-			drmHandleEvent(fd, &event_context);
+			kms_handle_event(fd, &event_context);
 	}
 
 	return g_stop_requested ? -1 : 0;
@@ -612,11 +598,12 @@ static int display_present(struct display *display, int buffer_index)
 	int ret;
 
 	if (!display->mode_set) {
-		ret = drmModeSetCrtc(display->fd, display->crtc_id, buffer->fb_id,
-				     0, 0, &display->connector_id, 1,
-				     &display->mode);
+		ret = kms_mode_set_crtc(display->fd, display->crtc_id,
+					buffer->fb_id, 0, 0,
+					&display->connector_id, 1,
+					&display->mode);
 		if (ret) {
-			fprintf(stderr, "drmModeSetCrtc failed: %s\n",
+			fprintf(stderr, "kms_mode_set_crtc failed: %s\n",
 				strerror(errno));
 			return -1;
 		}
@@ -626,10 +613,11 @@ static int display_present(struct display *display, int buffer_index)
 	}
 
 	bool waiting = true;
-	ret = drmModePageFlip(display->fd, display->crtc_id, buffer->fb_id,
-			      DRM_MODE_PAGE_FLIP_EVENT, &waiting);
+	ret = kms_mode_page_flip(display->fd, display->crtc_id, buffer->fb_id,
+				 KMS_MODE_PAGE_FLIP_EVENT, &waiting);
 	if (ret) {
-		fprintf(stderr, "drmModePageFlip failed: %s\n", strerror(errno));
+		fprintf(stderr, "kms_mode_page_flip failed: %s\n",
+			strerror(errno));
 		return -1;
 	}
 	if (wait_for_page_flip(display->fd, &waiting))
@@ -658,7 +646,7 @@ fail:
 	for (int i = 0; i < BUFFER_COUNT; i++)
 		destroy_dumb_buffer(display, &display->buffers[i]);
 	if (display->old_crtc)
-		drmModeFreeCrtc(display->old_crtc);
+		kms_free_crtc(display->old_crtc);
 	if (display->fd >= 0)
 		close(display->fd);
 	return -1;
@@ -667,16 +655,17 @@ fail:
 static void display_destroy(struct display *display)
 {
 	if (display->mode_set && display->fd >= 0 && display->old_crtc) {
-		drmModeSetCrtc(display->fd, display->old_crtc->crtc_id,
-			       display->old_crtc->buffer_id, display->old_crtc->x,
-			       display->old_crtc->y, &display->connector_id, 1,
-			       &display->old_crtc->mode);
+		kms_mode_set_crtc(display->fd, display->old_crtc->crtc_id,
+				  display->old_crtc->buffer_id,
+				  display->old_crtc->x, display->old_crtc->y,
+				  &display->connector_id, 1,
+				  &display->old_crtc->mode);
 	}
 
 	for (int i = 0; i < BUFFER_COUNT; i++)
 		destroy_dumb_buffer(display, &display->buffers[i]);
 	if (display->old_crtc)
-		drmModeFreeCrtc(display->old_crtc);
+		kms_free_crtc(display->old_crtc);
 	if (display->fd >= 0)
 		close(display->fd);
 }

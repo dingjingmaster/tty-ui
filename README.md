@@ -6,14 +6,13 @@
 
 ## 构建
 
-需要开发包：
-
-- `libdrm`
+默认构建需要 C 编译器、`make` 和基础 libc 头文件，不需要 `libdrm` 开发包。
 
 默认构建使用 `src/font_atlas.c` 中的内嵌位图字形表，不依赖系统字体文件、
 Fontconfig、FreeType 或 `libfreetype.a`。
 
-运行时动态依赖目标为 `libdrm.so` 和基础 C 运行时。
+DRM/KMS 功能通过项目内最小 ioctl 封装保留，运行时动态依赖目标为基础
+C 运行时。
 
 ```sh
 make

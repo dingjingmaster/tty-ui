@@ -26,3 +26,6 @@
 | 7 | 2026-05-27 | L3 | research | [7-research-embedded-bitmap-font.md](7-research-embedded-bitmap-font.md) | 已完成 | 调研用内嵌位图字形替代 FreeType。 |
 | 7 | 2026-05-27 | L3 | plan | [7-plan-embedded-bitmap-font.md](7-plan-embedded-bitmap-font.md) | 已完成 | 规划移除默认构建对 `libfreetype.a` 的依赖。 |
 | 7 | 2026-05-27 | L3 | summary | [7-summary-embedded-bitmap-font.md](7-summary-embedded-bitmap-font.md) | 已完成 | 总结内嵌位图字形并移除 FreeType 构建依赖。 |
+| 8 | 2026-05-27 | L3 | research | [8-research-embedded-drm-ioctl.md](8-research-embedded-drm-ioctl.md) | 已完成 | 调研用项目内 DRM ioctl 封装替代 `libdrm`。 |
+| 8 | 2026-05-27 | L3 | plan | [8-plan-embedded-drm-ioctl.md](8-plan-embedded-drm-ioctl.md) | 已完成 | 规划移除 `libdrm` 运行和默认构建依赖。 |
+| 8 | 2026-05-27 | L3 | summary | [8-summary-embedded-drm-ioctl.md](8-summary-embedded-drm-ioctl.md) | 已完成 | 总结内嵌 DRM ioctl 封装并移除 `libdrm` 依赖。 |
