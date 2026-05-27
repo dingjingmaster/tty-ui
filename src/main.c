@@ -9,6 +9,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/reboot.h>
 #include <sys/select.h>
 #include <termios.h>
 #include <unistd.h>
@@ -59,8 +60,15 @@ enum focus_target {
 	FOCUS_USER = 0,
 	FOCUS_PASSWORD,
 	FOCUS_CONTINUE,
-	FOCUS_EXIT,
+	FOCUS_SHUTDOWN,
 	FOCUS_COUNT,
+};
+
+enum input_escape_state {
+	ESCAPE_NONE = 0,
+	ESCAPE_SEEN,
+	ESCAPE_CSI,
+	ESCAPE_SS3,
 };
 
 struct ui_state {
@@ -759,7 +767,7 @@ static void render_ui(struct display *display, int buffer_index,
 	const float button_h = 44.0f;
 	const float button_gap = 42.0f;
 	const float continue_button_x = center_x - button_w - button_gap / 2.0f;
-	const float exit_button_x = form_x + form_w - button_w;
+	const float shutdown_button_x = form_x + form_w - button_w;
 	char mask[INPUT_LIMIT];
 	struct text_bounds label_bounds;
 	struct text_bounds tagline_bounds;
@@ -796,8 +804,8 @@ static void render_ui(struct display *display, int buffer_index,
 
 	draw_button(&canvas, continue_button_x, button_y, button_w, button_h,
 		    "继续启动", state->focus == FOCUS_CONTINUE);
-	draw_button(&canvas, exit_button_x, button_y, button_w, button_h,
-		    "退出", state->focus == FOCUS_EXIT);
+	draw_button(&canvas, shutdown_button_x, button_y, button_w, button_h,
+		    "关机", state->focus == FOCUS_SHUTDOWN);
 
 	draw_rect(&canvas, margin + 1.0f, h - margin - 78.0f,
 		  w - margin * 2.0f - 2.0f, 1.0f, rgb(46, 56, 59));
@@ -828,23 +836,15 @@ static bool handle_key(struct ui_state *state, unsigned char ch)
 		return true;
 	}
 
-	if (ch == 27) {
-		state->done = true;
-		state->exit_code = 1;
-		return true;
-	}
-
 	if (ch == '\r' || ch == '\n') {
-		if (state->focus == FOCUS_USER)
-			state->focus = FOCUS_PASSWORD;
-		else if (state->focus == FOCUS_PASSWORD)
-			state->focus = FOCUS_CONTINUE;
-		else if (state->focus == FOCUS_CONTINUE) {
+		if (state->focus == FOCUS_CONTINUE) {
 			state->done = true;
 			state->exit_code = 0;
-		} else if (state->focus == FOCUS_EXIT) {
+		} else if (state->focus == FOCUS_SHUTDOWN) {
 			state->done = true;
-			state->exit_code = 1;
+			state->exit_code = 2;
+		} else {
+			return false;
 		}
 		return true;
 	}
@@ -869,6 +869,44 @@ static bool handle_key(struct ui_state *state, unsigned char ch)
 		return append_input(target, target_len, INPUT_LIMIT, ch);
 
 	return false;
+}
+
+static bool handle_input_byte(struct ui_state *state,
+			      enum input_escape_state *escape,
+			      unsigned char ch)
+{
+	if (*escape == ESCAPE_SEEN) {
+		if (ch == '[') {
+			*escape = ESCAPE_CSI;
+			return false;
+		}
+		if (ch == 'O') {
+			*escape = ESCAPE_SS3;
+			return false;
+		}
+		if (ch == 27)
+			return false;
+		*escape = ESCAPE_NONE;
+		return handle_key(state, ch);
+	}
+
+	if (*escape == ESCAPE_CSI) {
+		if (ch >= 0x40 && ch <= 0x7e)
+			*escape = ESCAPE_NONE;
+		return false;
+	}
+
+	if (*escape == ESCAPE_SS3) {
+		*escape = ESCAPE_NONE;
+		return false;
+	}
+
+	if (ch == 27) {
+		*escape = ESCAPE_SEEN;
+		return false;
+	}
+
+	return handle_key(state, ch);
 }
 
 static int terminal_enter_raw(struct terminal_state *terminal)
@@ -909,6 +947,7 @@ static int run_ui(struct display *display)
 	struct ui_state state = {
 		.focus = FOCUS_USER,
 	};
+	enum input_escape_state escape = ESCAPE_NONE;
 	int buffer_index = next_back_buffer(display);
 
 	render_ui(display, buffer_index, &state);
@@ -947,7 +986,9 @@ static int run_ui(struct display *display)
 			}
 
 			for (ssize_t i = 0; i < count; i++)
-				dirty = handle_key(&state, input[i]) || dirty;
+				dirty = handle_input_byte(&state, &escape,
+							  input[i]) ||
+					dirty;
 		}
 
 		if (dirty && !state.done) {
@@ -971,6 +1012,16 @@ static void usage(const char *program)
 		"              Text uses a built-in bitmap glyph atlas\n"
 		"  -h          show this help\n",
 		program);
+}
+
+static int power_off_system(void)
+{
+	sync();
+	if (reboot(RB_POWER_OFF)) {
+		fprintf(stderr, "power off failed: %s\n", strerror(errno));
+		return 1;
+	}
+	return 0;
 }
 
 int main(int argc, char **argv)
@@ -1008,5 +1059,7 @@ int main(int argc, char **argv)
 
 	terminal_restore(&terminal);
 	display_destroy(&display);
+	if (ret == 2)
+		return power_off_system();
 	return ret;
 }

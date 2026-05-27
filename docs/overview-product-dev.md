@@ -3,7 +3,7 @@
 > 文档元数据
 > - 文档版本：v1.0.0
 > - 最后更新：2026-05-27
-> - 更新来源：docs/dev/1-task-diskcrypt-kms-ui.md、docs/dev/4-task-embed-font-static-freetype.md、docs/dev/5-task-trim-runtime-deps.md、docs/dev/6-summary-drm-dumb-buffer.md、docs/dev/7-summary-embedded-bitmap-font.md、docs/dev/8-summary-embedded-drm-ioctl.md、docs/dev/9-task-static-libc.md
+> - 更新来源：docs/dev/1-task-diskcrypt-kms-ui.md、docs/dev/4-task-embed-font-static-freetype.md、docs/dev/5-task-trim-runtime-deps.md、docs/dev/6-summary-drm-dumb-buffer.md、docs/dev/7-summary-embedded-bitmap-font.md、docs/dev/8-summary-embedded-drm-ioctl.md、docs/dev/9-task-static-libc.md、docs/dev/11-task-shutdown-button-escape-input.md
 > - 关联产品文档：docs/overview-product.md
 
 ## 1. 技术栈
@@ -24,7 +24,7 @@
 - 进程/线程/内核边界：单进程单线程；通过 Linux DRM ioctl 调用内核 DRM/KMS；不创建后台线程。
 - 客户端/服务端/驱动边界：程序作为 DRM client 直接提交 CRTC mode set 和 page flip。
 - 数据流：键盘输入更新内存中的 UI 状态；UI 状态由 CPU 写入 mmap 后的 XRGB8888 dumb buffer；buffer 交给 KMS 显示。
-- 控制流：初始化 DRM/KMS 和 dumb buffer -> CPU 渲染首帧 -> 等待键盘事件 -> 状态变化后重绘并 page flip -> 退出时尝试恢复旧 CRTC。
+- 控制流：初始化 DRM/KMS 和 dumb buffer -> CPU 渲染首帧 -> 等待键盘事件 -> 状态变化后重绘并 page flip -> 结束时尝试恢复旧 CRTC；关机按钮确认后再执行 `sync()` 和 `reboot(RB_POWER_OFF)`。
 - 外部依赖：DRM 设备；位图字形表已打包进二进制。
 
 ## 3. 关键接口
@@ -49,6 +49,7 @@
 | DRM UAPI | ioctl 结构体布局、双阶段资源查询、page flip 事件处理 | 构建检查、人工审查、依赖检查 | docs/dev/8-summary-embedded-drm-ioctl.md |
 | 内存/生命周期 | DRM FB、dumb buffer mmap、字形 bitmap 边界检查 | 构建检查、人工审查错误路径 | docs/dev/7-summary-embedded-bitmap-font.md |
 | 权限/系统调用 | 打开 DRM 设备、设置 CRTC、page flip | 不在桌面会话实机运行；README 说明运行前提 | docs/dev/1-task-diskcrypt-kms-ui.md |
+| 关机路径 | `sync()`、`reboot(RB_POWER_OFF)` 权限和调用时机 | 本地不执行真实关机；人工审查确认终端和显示恢复后调用 | docs/dev/11-task-shutdown-button-escape-input.md |
 | 构建链接 | 静态 libc、内嵌 DRM ioctl 封装、内嵌位图字形表、可选开发期字形生成器 | `make`、`file build/andsec-disks-crypt-init-ui`、`readelf -d build/andsec-disks-crypt-init-ui` | docs/dev/10-task-rename-binary.md |
 
 ## 6. 构建与验证
@@ -62,7 +63,7 @@
 - 集成验证：需在真实 TTY/initramfs 或可获取 DRM master 的测试机运行 `build/andsec-disks-crypt-init-ui -D /dev/dri/card0`。
 - 静态检查：当前使用 `git diff --check` 做补丁格式检查。
 - 高风险验证：本地仅做构建和人工审查，不执行会切换真实显示输出的程序运行。
-- 最小人工验证步骤：在目标 TTY 运行程序，确认界面显示、Tab 切换、Enter 确认、Esc 退出。
+- 最小人工验证步骤：在目标 TTY 运行程序，确认界面显示、Tab 切换、输入框内 Enter 不切换焦点、按钮上 Enter 确认、Esc 不退出、方向键不退出，关机按钮在目标环境可触发系统关机。
 
 ## 7. 发布与回滚
 
@@ -100,3 +101,4 @@
 | 2026-05-27 | 改为项目内 DRM ioctl 封装 | 主程序不再依赖 `libdrm.so.2`，直接动态依赖仅 `libc` | docs/dev/8-summary-embedded-drm-ioctl.md |
 | 2026-05-27 | 默认静态链接 libc | 主程序不再依赖 `libc.so.6` 或动态加载器 | docs/dev/9-task-static-libc.md |
 | 2026-05-27 | 重命名构建产物 | 产物路径改为 `build/andsec-disks-crypt-init-ui` | docs/dev/10-task-rename-binary.md |
+| 2026-05-27 | 调整输入和关机动作 | Esc/方向键不再退出，关机按钮确认后请求系统关机 | docs/dev/11-task-shutdown-button-escape-input.md |

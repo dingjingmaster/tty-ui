@@ -3,7 +3,7 @@
 > 文档元数据
 > - 文档版本：v1.0.0
 > - 最后更新：2026-05-27
-> - 更新来源：docs/dev/1-task-diskcrypt-kms-ui.md、docs/dev/4-task-embed-font-static-freetype.md、docs/dev/6-summary-drm-dumb-buffer.md、docs/dev/7-summary-embedded-bitmap-font.md、docs/dev/8-summary-embedded-drm-ioctl.md、docs/dev/9-task-static-libc.md
+> - 更新来源：docs/dev/1-task-diskcrypt-kms-ui.md、docs/dev/4-task-embed-font-static-freetype.md、docs/dev/6-summary-drm-dumb-buffer.md、docs/dev/7-summary-embedded-bitmap-font.md、docs/dev/8-summary-embedded-drm-ioctl.md、docs/dev/9-task-static-libc.md、docs/dev/11-task-shutdown-button-escape-input.md
 
 ## 1. 产品定位
 
@@ -14,31 +14,32 @@
 
 ## 2. 功能边界
 
-- 核心功能：绘制 DiskCrypt 登录界面；支持用户名输入、密码掩码输入、继续启动和退出按钮。
+- 核心功能：绘制 DiskCrypt 登录界面；支持用户名输入、密码掩码输入、继续启动和关机按钮。
 - 不支持功能：真实凭据校验、PAM 集成、鼠标/触控输入、多语言切换、动画主题系统。
-- 关键对象：用户名输入框、密码输入框、继续启动按钮、退出按钮。
+- 关键对象：用户名输入框、密码输入框、继续启动按钮、关机按钮。
 - 关键状态：当前焦点、用户名内容、密码内容、用户确认结果。
 
 ## 3. 关键场景
 
 | 场景 | 用户目标 | 成功标准 | 异常/边界 |
 |------|----------|----------|-----------|
-| TTY/initramfs 登录 | 输入用户名和密码并继续启动 | 界面可显示，Tab 可切换焦点，Enter 可确认 | 需要 DRM 设备和 DRM master 权限 |
-| 取消登录 | 用户选择退出 | Enter 确认退出按钮后程序返回非 0 | Esc 也会退出 |
+| TTY/initramfs 登录 | 输入用户名和密码并继续启动 | 界面可显示，Tab 可切换焦点，Enter 可确认按钮 | 需要 DRM 设备和 DRM master 权限 |
+| 主动关机 | 用户选择关机 | Enter 确认关机按钮后程序恢复显示/终端状态并请求系统关机 | 需要关机权限；Esc 不退出 |
 
 ## 4. 核心流程
 
 ```text
 1. 程序打开 DRM 设备并初始化图形输出。
 2. 用户通过键盘输入用户名和密码。
-3. 用户用 Tab 切换到按钮并用 Enter 确认继续启动或退出。
+3. 用户用 Tab 切换到按钮并用 Enter 确认继续启动或关机。
 ```
 
 ## 5. 产品规则
 
 - 权限规则：运行环境必须允许程序打开 `/dev/dri/card*` 并获得 DRM master。
-- 状态流转：用户名 -> 密码 -> 继续启动 -> 退出，Tab 循环切换。
-- 异常处理：Esc 或退出按钮返回非 0；显示初始化失败时程序直接退出。
+- 状态流转：用户名 -> 密码 -> 继续启动 -> 关机，Tab 循环切换。
+- 按键规则：只有 Tab 切换焦点；Enter 只确认当前聚焦按钮，不在输入框内切换焦点。
+- 异常处理：Esc 不退出；方向键等终端转义序列会被忽略；关机按钮确认后请求系统关机；显示初始化失败时程序直接退出。
 - 兼容约束：目标运行环境不依赖桌面 GUI；位图字形表已打包进二进制，显示路径使用 Linux DRM/KMS dumb buffer，不需要 `libdrm.so` 或 `libc.so.6`。
 - 用户可见行为：密码只显示掩码字符，不在界面回显明文。
 
@@ -65,3 +66,4 @@
 | 2026-05-27 | 使用内嵌位图字形表显示文字 | 默认构建不再依赖 `libfreetype.a` | docs/dev/7-summary-embedded-bitmap-font.md |
 | 2026-05-27 | 使用项目内 DRM ioctl 封装 | 去掉 `libdrm.so` 运行依赖并保留 DRM/KMS 功能 | docs/dev/8-summary-embedded-drm-ioctl.md |
 | 2026-05-27 | 默认静态链接 libc | 去掉 `libc.so.6` 运行依赖 | docs/dev/9-task-static-libc.md |
+| 2026-05-27 | Esc 不再退出，退出按钮改为关机 | 避免方向键误触退出，并提供显式关机路径 | docs/dev/11-task-shutdown-button-escape-input.md |

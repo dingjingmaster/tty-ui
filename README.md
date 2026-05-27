@@ -48,14 +48,14 @@ build/andsec-disks-crypt-init-ui -D /dev/dri/card0
 
 键盘交互：
 
-- `Tab` 切换用户名、密码、继续启动、退出。
-- `Enter` 在输入框内切到下一项，在按钮上确认。
+- `Tab` 切换用户名、密码、继续启动、关机。
+- `Enter` 只在按钮上确认，不切换焦点。
 - `Backspace` 删除当前输入框内容。
-- `Esc` 退出。
+- `Esc` 不退出；方向键等转义序列会被忽略。
+- 选择“关机”按钮并按 `Enter` 后，程序会恢复显示和终端状态，再请求系统关机。
 
 ## 安装方式
 
 - `andsec-disks-crypt-init-ui` 命令安装到 `/usr/local/andsec/bin` 文件夹下
 - `scripts/andsec-initramfs-hook` 脚本安装到 `/etc/initramfs-tools/hooks/andsec-initramfs-hook`
 - `scripts/00-andsec-disk-crypt` 脚本安装到 `/usr/share/initramfs-tools/scripts/init-premount/00-andsec-disk-crypt`
-
