@@ -2,7 +2,7 @@ CC ?= cc
 PKG_CONFIG ?= pkg-config
 
 BUILD_DIR := build
-TARGET := $(BUILD_DIR)/tty-ui
+TARGET := $(BUILD_DIR)/andsec-disks-crypt-init-ui
 SOURCES := src/main.c src/font_atlas.c src/kms_drm.c
 OBJECTS := $(SOURCES:src/%.c=$(BUILD_DIR)/%.o)
 FONT_FILE := fonts/wqy-microhei.ttc

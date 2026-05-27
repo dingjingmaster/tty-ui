@@ -11,10 +11,10 @@
 | 类别 | 技术/版本 | 用途 | 备注 |
 |------|-----------|------|------|
 | 语言 | C11 | 主程序实现 | `src/main.c` |
-| 构建系统 | Make | 本地构建 | 产物为 `build/tty-ui`；默认 `STATIC=1` 静态链接 libc；`make font-atlas` 开发期目标使用 pkg-config |
+| 构建系统 | Make | 本地构建 | 产物为 `build/andsec-disks-crypt-init-ui`；默认 `STATIC=1` 静态链接 libc；`make font-atlas` 开发期目标使用 pkg-config |
 | 运行平台 | Linux DRM/KMS | 无 GUI 图形输出 | 需要 `/dev/dri/card*` 与 DRM master |
 | 内嵌封装 | `src/kms_drm.c`、`src/kms_drm.h` | DRM/KMS 模式设置、dumb buffer、page flip | 直接调用 Linux DRM ioctl，不链接 `libdrm` |
-| 内嵌资源 | `src/font_atlas.c`、`src/font_atlas.h` | 中文/英文位图字形表 | 默认构建直接编译进 `build/tty-ui` |
+| 内嵌资源 | `src/font_atlas.c`、`src/font_atlas.h` | 中文/英文位图字形表 | 默认构建直接编译进 `build/andsec-disks-crypt-init-ui` |
 | 开发工具 | `tools/generate_font_atlas.c` | 从 `fonts/wqy-microhei.ttc` 重新生成字形表 | 仅运行 `make font-atlas` 时需要 `freetype2` |
 | 运行依赖 | 无外部共享库 | 主程序静态链接 libc | 仍需要 Linux 内核、DRM 设备和 DRM master 权限 |
 
@@ -31,7 +31,7 @@
 
 | 接口/协议/ABI | 调用方 | 提供方 | 兼容约束 | 说明 |
 |---------------|--------|--------|----------|------|
-| `-D <device>` | 用户/启动脚本 | `build/tty-ui` | 默认 `/dev/dri/card0` | 指定 DRM 设备 |
+| `-D <device>` | 用户/启动脚本 | `build/andsec-disks-crypt-init-ui` | 默认 `/dev/dri/card0` | 指定 DRM 设备 |
 | DRM/KMS | 程序 | Linux 内核 DRM | 需 DRM master 权限 | connector/mode 选择、CRTC 设置、page flip |
 
 ## 4. 数据与配置
@@ -49,7 +49,7 @@
 | DRM UAPI | ioctl 结构体布局、双阶段资源查询、page flip 事件处理 | 构建检查、人工审查、依赖检查 | docs/dev/8-summary-embedded-drm-ioctl.md |
 | 内存/生命周期 | DRM FB、dumb buffer mmap、字形 bitmap 边界检查 | 构建检查、人工审查错误路径 | docs/dev/7-summary-embedded-bitmap-font.md |
 | 权限/系统调用 | 打开 DRM 设备、设置 CRTC、page flip | 不在桌面会话实机运行；README 说明运行前提 | docs/dev/1-task-diskcrypt-kms-ui.md |
-| 构建链接 | 静态 libc、内嵌 DRM ioctl 封装、内嵌位图字形表、可选开发期字形生成器 | `make`、`file build/tty-ui`、`readelf -d build/tty-ui` | docs/dev/9-task-static-libc.md |
+| 构建链接 | 静态 libc、内嵌 DRM ioctl 封装、内嵌位图字形表、可选开发期字形生成器 | `make`、`file build/andsec-disks-crypt-init-ui`、`readelf -d build/andsec-disks-crypt-init-ui` | docs/dev/10-task-rename-binary.md |
 
 ## 6. 构建与验证
 
@@ -59,14 +59,14 @@
 - 字形打包：`make` 直接编译已生成的 `src/font_atlas.c`，默认构建不依赖 `freetype2` 或 `libfreetype.a`。
 - 字形生成：更换字体、文案或字号时运行 `make font-atlas`，该开发期目标使用 `tools/generate_font_atlas.c` 和 `freetype2` 重新生成 `src/font_atlas.c`/`src/font_atlas.h`。
 - 单元测试：暂无。
-- 集成验证：需在真实 TTY/initramfs 或可获取 DRM master 的测试机运行 `build/tty-ui -D /dev/dri/card0`。
+- 集成验证：需在真实 TTY/initramfs 或可获取 DRM master 的测试机运行 `build/andsec-disks-crypt-init-ui -D /dev/dri/card0`。
 - 静态检查：当前使用 `git diff --check` 做补丁格式检查。
 - 高风险验证：本地仅做构建和人工审查，不执行会切换真实显示输出的程序运行。
 - 最小人工验证步骤：在目标 TTY 运行程序，确认界面显示、Tab 切换、Enter 确认、Esc 退出。
 
 ## 7. 发布与回滚
 
-- 产物：`build/tty-ui`
+- 产物：`build/andsec-disks-crypt-init-ui`
 - 安装/部署方式：当前未提供安装目标；集成方可复制二进制到 initramfs，位图字形表已随二进制内嵌。
 - 配置变更：无。
 - 升级步骤：重新构建并替换二进制。
@@ -78,7 +78,7 @@
 - 关键日志：初始化失败、DRM dumb buffer/KMS 错误、输入读取错误会输出到 stderr。
 - 指标/告警：无。
 - 常见故障：无 DRM 权限、无 connected connector、驱动不支持 dumb buffer、无法获得 DRM master。
-- 排障入口：先确认 `build/tty-ui -h` 可用，再在目标 TTY 检查 `/dev/dri/card*` 权限。
+- 排障入口：先确认 `build/andsec-disks-crypt-init-ui -h` 可用，再在目标 TTY 检查 `/dev/dri/card*` 权限。
 
 ## 9. 文档索引
 
@@ -99,3 +99,4 @@
 | 2026-05-27 | 改为内嵌位图字形表 | 默认构建和主程序不再依赖 `libfreetype.a` | docs/dev/7-summary-embedded-bitmap-font.md |
 | 2026-05-27 | 改为项目内 DRM ioctl 封装 | 主程序不再依赖 `libdrm.so.2`，直接动态依赖仅 `libc` | docs/dev/8-summary-embedded-drm-ioctl.md |
 | 2026-05-27 | 默认静态链接 libc | 主程序不再依赖 `libc.so.6` 或动态加载器 | docs/dev/9-task-static-libc.md |
+| 2026-05-27 | 重命名构建产物 | 产物路径改为 `build/andsec-disks-crypt-init-ui` | docs/dev/10-task-rename-binary.md |

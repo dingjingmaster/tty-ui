@@ -1,5 +1,5 @@
 /*
- * Minimal DRM/KMS wrapper used by tty-ui.
+ * Minimal DRM/KMS wrapper used by andsec-disks-crypt-init-ui.
  *
  * Portions of the DRM UAPI layouts and ioctl numbers below are derived from
  * libdrm's include/drm/drm.h and include/drm/drm_mode.h.

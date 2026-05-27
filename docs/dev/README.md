@@ -30,3 +30,4 @@
 | 8 | 2026-05-27 | L3 | plan | [8-plan-embedded-drm-ioctl.md](8-plan-embedded-drm-ioctl.md) | 已完成 | 规划移除 `libdrm` 运行和默认构建依赖。 |
 | 8 | 2026-05-27 | L3 | summary | [8-summary-embedded-drm-ioctl.md](8-summary-embedded-drm-ioctl.md) | 已完成 | 总结内嵌 DRM ioctl 封装并移除 `libdrm` 依赖。 |
 | 9 | 2026-05-27 | L2 | task | [9-task-static-libc.md](9-task-static-libc.md) | 已完成 | 默认静态链接 libc，去掉 `libc.so.6` 运行依赖。 |
+| 10 | 2026-05-27 | L2 | task | [10-task-rename-binary.md](10-task-rename-binary.md) | 已完成 | 将默认构建产物重命名为 `andsec-disks-crypt-init-ui`。 |

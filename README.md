@@ -19,7 +19,7 @@ DRM/KMS 功能通过项目内最小 ioctl 封装保留。默认产物静态链�
 make
 ```
 
-产物位于 `build/tty-ui`。
+产物位于 `build/andsec-disks-crypt-init-ui`。
 
 如果构建机缺少静态 libc，或需要动态链接调试版本，可使用：
 
@@ -39,7 +39,7 @@ make font-atlas
 需要在真实 TTY/initramfs 等可获取 DRM master 的环境运行：
 
 ```sh
-build/tty-ui -D /dev/dri/card0
+build/andsec-disks-crypt-init-ui -D /dev/dri/card0
 ```
 
 可用参数：
