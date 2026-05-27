@@ -1,6 +1,8 @@
 .dj-agent/
 AGENTS.md
 
+.codex
+
 # Prerequisites
 *.d
 

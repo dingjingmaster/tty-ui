@@ -14,7 +14,6 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES2/gl2.h>
-#include <fontconfig/fontconfig.h>
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include <gbm.h>
@@ -31,6 +30,9 @@
 
 #define DEFAULT_DRM_DEVICE "/dev/dri/card0"
 #define INPUT_LIMIT 128
+
+extern const unsigned char _binary_fonts_wqy_microhei_ttc_start[];
+extern const unsigned char _binary_fonts_wqy_microhei_ttc_end[];
 
 struct color {
 	float r;
@@ -230,7 +232,7 @@ static int init_shapes(struct shape_renderer *renderer)
 	return 0;
 }
 
-static int init_text_renderer(struct text_renderer *renderer, const char *font_path)
+static int init_text_renderer(struct text_renderer *renderer)
 {
 	static const char *vertex_source =
 		"attribute vec2 a_pos;\n"
@@ -258,50 +260,13 @@ static int init_text_renderer(struct text_renderer *renderer, const char *font_p
 		return -1;
 	}
 
-	if (font_path) {
-		if (FT_New_Face(renderer->library, font_path, 0, &renderer->face)) {
-			fprintf(stderr, "failed to load font: %s\n", font_path);
-			return -1;
-		}
-	} else {
-		FcPattern *pattern;
-		FcPattern *match;
-		FcResult result;
-		FcChar8 *file = NULL;
-		int index = 0;
-
-		if (!FcInit()) {
-			fprintf(stderr, "failed to initialize fontconfig\n");
-			return -1;
-		}
-
-		pattern = FcPatternCreate();
-		if (!pattern)
-			return -1;
-
-		FcPatternAddString(pattern, FC_FAMILY, (const FcChar8 *)"sans-serif");
-		FcPatternAddString(pattern, FC_LANG, (const FcChar8 *)"zh-cn");
-		FcConfigSubstitute(NULL, pattern, FcMatchPattern);
-		FcDefaultSubstitute(pattern);
-
-		match = FcFontMatch(NULL, pattern, &result);
-		FcPatternDestroy(pattern);
-		if (!match ||
-		    FcPatternGetString(match, FC_FILE, 0, &file) != FcResultMatch) {
-			fprintf(stderr, "failed to find a CJK-capable font\n");
-			if (match)
-				FcPatternDestroy(match);
-			return -1;
-		}
-
-		FcPatternGetInteger(match, FC_INDEX, 0, &index);
-		if (FT_New_Face(renderer->library, (const char *)file, index,
-				&renderer->face)) {
-			fprintf(stderr, "failed to load matched font: %s\n", file);
-			FcPatternDestroy(match);
-			return -1;
-		}
-		FcPatternDestroy(match);
+	if (FT_New_Memory_Face(renderer->library,
+			       (const FT_Byte *)_binary_fonts_wqy_microhei_ttc_start,
+			       (FT_Long)(_binary_fonts_wqy_microhei_ttc_end -
+					 _binary_fonts_wqy_microhei_ttc_start),
+			       0, &renderer->face)) {
+		fprintf(stderr, "failed to load embedded font\n");
+		return -1;
 	}
 
 	FT_Select_Charmap(renderer->face, FT_ENCODING_UNICODE);
@@ -990,8 +955,7 @@ static int init_egl(struct egl_state *egl, const struct gbm_state *gbm)
 
 static void display_destroy(struct display *display);
 
-static int display_init(struct display *display, const char *device,
-			const char *font_path)
+static int display_init(struct display *display, const char *device)
 {
 	memset(display, 0, sizeof(*display));
 	display->drm.fd = -1;
@@ -1004,7 +968,7 @@ static int display_init(struct display *display, const char *device,
 		goto fail;
 	if (init_shapes(&display->shapes))
 		goto fail;
-	if (init_text_renderer(&display->text, font_path))
+	if (init_text_renderer(&display->text))
 		goto fail;
 
 	glViewport(0, 0, display->gbm.width, display->gbm.height);
@@ -1444,11 +1408,11 @@ static int run_ui(struct display *display)
 static void usage(const char *program)
 {
 	fprintf(stderr,
-		"Usage: %s [-D device] [-f font]\n"
+		"Usage: %s [-D device]\n"
 		"\n"
 		"Options:\n"
 		"  -D device   DRM device, default " DEFAULT_DRM_DEVICE "\n"
-		"  -f font     font file with Chinese glyph coverage\n"
+		"              Font is embedded from fonts/wqy-microhei.ttc\n"
 		"  -h          show this help\n",
 		program);
 }
@@ -1456,19 +1420,15 @@ static void usage(const char *program)
 int main(int argc, char **argv)
 {
 	const char *device = DEFAULT_DRM_DEVICE;
-	const char *font_path = NULL;
 	struct display display;
 	struct terminal_state terminal;
 	int opt;
 	int ret;
 
-	while ((opt = getopt(argc, argv, "D:f:h")) != -1) {
+	while ((opt = getopt(argc, argv, "D:h")) != -1) {
 		switch (opt) {
 		case 'D':
 			device = optarg;
-			break;
-		case 'f':
-			font_path = optarg;
 			break;
 		case 'h':
 			usage(argv[0]);
@@ -1482,7 +1442,7 @@ int main(int argc, char **argv)
 	signal(SIGINT, on_signal);
 	signal(SIGTERM, on_signal);
 
-	if (display_init(&display, device, font_path))
+	if (display_init(&display, device))
 		return 1;
 
 	if (terminal_enter_raw(&terminal))

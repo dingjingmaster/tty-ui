@@ -13,7 +13,10 @@ X11、Wayland 或桌面 compositor。
 - `egl`
 - `glesv2`
 - `freetype2`
-- `fontconfig`
+
+构建时会把 `fonts/wqy-microhei.ttc` 打包进二进制，并优先静态链接
+`libfreetype.a`。运行时不再需要系统字体文件、Fontconfig 或
+`libfreetype.so`。
 
 ```sh
 make
@@ -32,7 +35,6 @@ build/tty-ui -D /dev/dri/card0
 可用参数：
 
 - `-D <device>`：指定 DRM 设备，默认 `/dev/dri/card0`。
-- `-f <font>`：指定支持中文的字体文件；未指定时通过 Fontconfig 查找中文无衬线字体。
 
 键盘交互：
 
