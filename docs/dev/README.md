@@ -17,3 +17,4 @@
 |----|------|------|------|------|------|------|
 | 1 | 2026-05-27 | L2 | task | [1-task-diskcrypt-kms-ui.md](1-task-diskcrypt-kms-ui.md) | 已完成 | 基于 kmscube 技术栈实现无 GUI 环境 DiskCrypt 登录界面。 |
 | 2 | 2026-05-27 | L2 | task | [2-task-align-exit-button.md](2-task-align-exit-button.md) | 已完成 | 调整按钮布局：继续启动保持原位，退出按钮右对齐。 |
+| 3 | 2026-05-27 | L2 | task | [3-task-remove-header-accent.md](3-task-remove-header-accent.md) | 已完成 | 移除“安得合众”下方的蓝色装饰横线。 |

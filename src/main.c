@@ -1246,7 +1246,6 @@ static void render_ui(struct display *display, const struct ui_state *state)
 	struct color line = { 0.34f, 0.40f, 0.43f, 1.0f };
 	struct color primary = { 0.92f, 0.96f, 0.96f, 1.0f };
 	struct color muted = { 0.67f, 0.75f, 0.76f, 1.0f };
-	struct color accent = { 0.30f, 0.74f, 0.82f, 1.0f };
 	struct color tagline = { 0.70f, 0.88f, 0.67f, 1.0f };
 
 	glViewport(0, 0, display->gbm.width, display->gbm.height);
@@ -1295,9 +1294,6 @@ static void render_ui(struct display *display, const struct ui_state *state)
 	draw_text(display, w - margin - 32.0f - (float)tagline_width,
 		  h - margin - 48.0f - (float)tagline_height,
 		  "全盘加密  安全无忧", 24, tagline);
-
-	draw_rect(display, margin + 18.0f, margin + header_h - 16.0f,
-		  clampf(w * 0.18f, 120.0f, 240.0f), 3.0f, accent);
 }
 
 static bool append_input(char *buffer, size_t *length, size_t capacity,
