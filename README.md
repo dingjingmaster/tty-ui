@@ -52,3 +52,10 @@ build/andsec-disks-crypt-init-ui -D /dev/dri/card0
 - `Enter` 在输入框内切到下一项，在按钮上确认。
 - `Backspace` 删除当前输入框内容。
 - `Esc` 退出。
+
+## 安装方式
+
+- `andsec-disks-crypt-init-ui` 命令安装到 `/usr/local/andsec/bin` 文件夹下
+- `scripts/andsec-initramfs-hook` 脚本安装到 `/etc/initramfs-tools/hooks/andsec-initramfs-hook`
+- `scripts/00-andsec-disk-crypt` 脚本安装到 `/usr/share/initramfs-tools/scripts/init-premount/00-andsec-disk-crypt`
+
