@@ -3,7 +3,7 @@
 > 文档元数据
 > - 文档版本：v1.0.0
 > - 最后更新：2026-05-27
-> - 更新来源：docs/dev/1-task-diskcrypt-kms-ui.md、docs/dev/4-task-embed-font-static-freetype.md
+> - 更新来源：docs/dev/1-task-diskcrypt-kms-ui.md、docs/dev/4-task-embed-font-static-freetype.md、docs/dev/5-task-trim-runtime-deps.md
 > - 关联产品文档：docs/overview-product.md
 
 ## 1. 技术栈
@@ -16,6 +16,7 @@
 | 关键依赖 | libdrm、GBM、EGL、GLESv2 | 裸显示链路和 GPU 绘制 | 与 kmscube 技术栈一致 |
 | 关键依赖 | FreeType | 中文/英文文字栅格化 | 构建优先链接 `libfreetype.a`，运行时不依赖 `libfreetype.so` |
 | 内嵌资源 | `fonts/wqy-microhei.ttc` | 默认中文字体 | 通过 linker binary object 打包进 `build/tty-ui` |
+| 运行依赖 | libdrm、libgbm、libEGL、libGLESv2、libc | 主程序直接动态依赖 | `libexpat`、`libm`、`libGLdispatch` 来自图形库传递依赖 |
 
 ## 2. 架构边界
 
@@ -47,13 +48,14 @@
 |----------|--------|----------|----------|
 | 内存/生命周期 | DRM FB、GBM BO、EGL context、FreeType face 的释放顺序 | 构建检查、人工审查错误路径 | docs/dev/1-task-diskcrypt-kms-ui.md |
 | 权限/系统调用 | 打开 DRM 设备、设置 CRTC、page flip | 不在桌面会话实机运行；README 说明运行前提 | docs/dev/1-task-diskcrypt-kms-ui.md |
-| 构建链接 | pkg-config 依赖、内嵌字体对象、FreeType 静态链接参数 | `make`、`ldd build/tty-ui` | docs/dev/4-task-embed-font-static-freetype.md |
+| 构建链接 | pkg-config 依赖、内嵌字体对象、FreeType 静态链接参数、可选压缩/PNG 路径 stub | `make`、`ldd build/tty-ui`、`readelf -d build/tty-ui` | docs/dev/5-task-trim-runtime-deps.md |
 
 ## 6. 构建与验证
 
 - 构建命令：`make`
 - 字体打包：`make` 使用 `ld -r -b binary` 将 `fonts/wqy-microhei.ttc` 转为目标文件并链接进程序。
 - FreeType 链接：优先链接 `pkg-config --variable=libdir freetype2` 下的 `libfreetype.a`；如果构建机缺少静态库则回退到 `pkg-config --libs freetype2`。
+- FreeType 可选路径：当前内嵌 TTC 字体不需要 PNG embedded bitmap、gzip/bzip stream 或 WOFF2/Brotli；`src/freetype_optional_stubs.c` 让这些可选路径返回失败，以减少运行时动态库。
 - 单元测试：暂无。
 - 集成验证：需在真实 TTY/initramfs 或可获取 DRM master 的测试机运行 `build/tty-ui -D /dev/dri/card0`。
 - 静态检查：当前使用 `git diff --check` 做补丁格式检查。
@@ -90,3 +92,4 @@
 |------|------|------|----------|
 | 2026-05-27 | 新增裸 KMS UI 技术栈、构建和验证约定 | 确立项目当前实现架构 | docs/dev/1-task-diskcrypt-kms-ui.md |
 | 2026-05-27 | 内嵌默认字体，移除 Fontconfig/`-f`，优先静态链接 FreeType | 降低 initramfs 运行时依赖 | docs/dev/4-task-embed-font-static-freetype.md |
+| 2026-05-27 | 禁用 FreeType 可选压缩/PNG 路径 | 移除 `libbz2`、`libpng16`、`libz`、`libbrotli*` 运行时依赖 | docs/dev/5-task-trim-runtime-deps.md |

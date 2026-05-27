@@ -19,3 +19,4 @@
 | 2 | 2026-05-27 | L2 | task | [2-task-align-exit-button.md](2-task-align-exit-button.md) | 已完成 | 调整按钮布局：继续启动保持原位，退出按钮右对齐。 |
 | 3 | 2026-05-27 | L2 | task | [3-task-remove-header-accent.md](3-task-remove-header-accent.md) | 已完成 | 移除“安得合众”下方的蓝色装饰横线。 |
 | 4 | 2026-05-27 | L2 | task | [4-task-embed-font-static-freetype.md](4-task-embed-font-static-freetype.md) | 已完成 | 内嵌 `fonts/wqy-microhei.ttc`，移除 `-f`/Fontconfig，并静态链接 FreeType。 |
+| 5 | 2026-05-27 | L2 | task | [5-task-trim-runtime-deps.md](5-task-trim-runtime-deps.md) | 已完成 | 裁剪 FreeType 可选压缩/PNG 动态依赖。 |

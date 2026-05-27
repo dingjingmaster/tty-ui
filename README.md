@@ -16,7 +16,9 @@ X11、Wayland 或桌面 compositor。
 
 构建时会把 `fonts/wqy-microhei.ttc` 打包进二进制，并优先静态链接
 `libfreetype.a`。运行时不再需要系统字体文件、Fontconfig 或
-`libfreetype.so`。
+`libfreetype.so`。当前内嵌字体不需要 FreeType 的可选 PNG/压缩字体路径，
+构建中会禁用这些路径以避免运行时依赖 `libbz2`、`libpng16`、`libz` 和
+`libbrotli*`。
 
 ```sh
 make
