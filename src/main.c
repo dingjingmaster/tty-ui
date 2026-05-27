@@ -1233,7 +1233,8 @@ static void render_ui(struct display *display, const struct ui_state *state)
 	const float button_w = 150.0f;
 	const float button_h = 44.0f;
 	const float button_gap = 42.0f;
-	const float buttons_x = center_x - button_w - button_gap / 2.0f;
+	const float continue_button_x = center_x - button_w - button_gap / 2.0f;
+	const float exit_button_x = form_x + form_w - button_w;
 	char mask[INPUT_LIMIT];
 	int label_width = 0;
 	int label_height = 0;
@@ -1281,9 +1282,9 @@ static void render_ui(struct display *display, const struct ui_state *state)
 	draw_input(display, input_x, pass_y, input_w, row_h, mask,
 		   state->focus == FOCUS_PASSWORD);
 
-	draw_button(display, buttons_x, button_y, button_w, button_h, "继续启动",
-		    state->focus == FOCUS_CONTINUE);
-	draw_button(display, buttons_x + button_w + button_gap, button_y, button_w,
+	draw_button(display, continue_button_x, button_y, button_w, button_h,
+		    "继续启动", state->focus == FOCUS_CONTINUE);
+	draw_button(display, exit_button_x, button_y, button_w,
 		    button_h, "退出", state->focus == FOCUS_EXIT);
 
 	draw_rect(display, margin + 1.0f, h - margin - 78.0f,
