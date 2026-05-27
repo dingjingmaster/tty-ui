@@ -9,13 +9,9 @@
 需要开发包：
 
 - `libdrm`
-- `freetype2`
 
-构建时会把 `fonts/wqy-microhei.ttc` 打包进二进制，并优先静态链接
-`libfreetype.a`。运行时不再需要系统字体文件、Fontconfig 或
-`libfreetype.so`。当前内嵌字体不需要 FreeType 的可选 PNG/压缩字体路径，
-构建中会禁用这些路径以避免运行时依赖 `libbz2`、`libpng16`、`libz` 和
-`libbrotli*`。
+默认构建使用 `src/font_atlas.c` 中的内嵌位图字形表，不依赖系统字体文件、
+Fontconfig、FreeType 或 `libfreetype.a`。
 
 运行时动态依赖目标为 `libdrm.so` 和基础 C 运行时。
 
@@ -24,6 +20,13 @@ make
 ```
 
 产物位于 `build/tty-ui`。
+
+如果更换 `fonts/wqy-microhei.ttc`、调整界面文案或新增字号，需要在开发机安装
+`freetype2` 后重新生成字形表：
+
+```sh
+make font-atlas
+```
 
 ## 运行
 

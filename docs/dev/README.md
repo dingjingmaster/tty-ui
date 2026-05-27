@@ -23,3 +23,6 @@
 | 6 | 2026-05-27 | L3 | research | [6-research-drm-dumb-buffer.md](6-research-drm-dumb-buffer.md) | 已完成 | 调研切换到 DRM dumb buffer + CPU 软件绘制。 |
 | 6 | 2026-05-27 | L3 | plan | [6-plan-drm-dumb-buffer.md](6-plan-drm-dumb-buffer.md) | 已完成 | 规划替换 GBM/EGL/GLES 渲染层并收敛依赖。 |
 | 6 | 2026-05-27 | L3 | summary | [6-summary-drm-dumb-buffer.md](6-summary-drm-dumb-buffer.md) | 已完成 | 总结 DRM dumb buffer + CPU 绘制架构变更。 |
+| 7 | 2026-05-27 | L3 | research | [7-research-embedded-bitmap-font.md](7-research-embedded-bitmap-font.md) | 已完成 | 调研用内嵌位图字形替代 FreeType。 |
+| 7 | 2026-05-27 | L3 | plan | [7-plan-embedded-bitmap-font.md](7-plan-embedded-bitmap-font.md) | 已完成 | 规划移除默认构建对 `libfreetype.a` 的依赖。 |
+| 7 | 2026-05-27 | L3 | summary | [7-summary-embedded-bitmap-font.md](7-summary-embedded-bitmap-font.md) | 已完成 | 总结内嵌位图字形并移除 FreeType 构建依赖。 |

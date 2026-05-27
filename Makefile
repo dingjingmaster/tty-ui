@@ -1,28 +1,25 @@
 CC ?= cc
-LD ?= ld
-OBJCOPY ?= objcopy
 PKG_CONFIG ?= pkg-config
 
 BUILD_DIR := build
 TARGET := $(BUILD_DIR)/tty-ui
-SOURCES := src/main.c
-RUNTIME_STUB_SOURCES := src/freetype_optional_stubs.c
-OBJECTS := $(SOURCES:src/%.c=$(BUILD_DIR)/%.o) $(RUNTIME_STUB_SOURCES:src/%.c=$(BUILD_DIR)/%.o)
+SOURCES := src/main.c src/font_atlas.c
+OBJECTS := $(SOURCES:src/%.c=$(BUILD_DIR)/%.o)
 FONT_FILE := fonts/wqy-microhei.ttc
-FONT_OBJECT := $(BUILD_DIR)/wqy-microhei-font.o
+FONT_ATLAS_C := src/font_atlas.c
+FONT_ATLAS_H := src/font_atlas.h
+FONT_ATLAS_GENERATOR := $(BUILD_DIR)/generate_font_atlas
 PKGS := libdrm
-FREETYPE_CFLAGS := $(shell $(PKG_CONFIG) --cflags freetype2)
-FREETYPE_LIBDIR := $(shell $(PKG_CONFIG) --variable=libdir freetype2)
-FREETYPE_STATIC := $(FREETYPE_LIBDIR)/libfreetype.a
-FREETYPE_LIBS := $(if $(wildcard $(FREETYPE_STATIC)),$(FREETYPE_STATIC),$(shell $(PKG_CONFIG) --libs freetype2))
 
 CPPFLAGS += -D_DEFAULT_SOURCE
 BASE_CFLAGS := -std=c11 -Wall -Wextra -Wpedantic
 CFLAGS ?= -O2 -g
 PKG_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(PKGS))
 PKG_LIBS := $(shell $(PKG_CONFIG) --libs $(PKGS))
+GEN_FREETYPE_CFLAGS = $(shell $(PKG_CONFIG) --cflags freetype2)
+GEN_FREETYPE_LIBS = $(shell $(PKG_CONFIG) --libs freetype2)
 
-.PHONY: all clean run
+.PHONY: all clean run font-atlas
 
 all: $(TARGET)
 
@@ -30,15 +27,16 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 $(BUILD_DIR)/%.o: src/%.c | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) $(BASE_CFLAGS) $(CFLAGS) $(PKG_CFLAGS) $(FREETYPE_CFLAGS) -MMD -MP -c $< -o $@
+	$(CC) $(CPPFLAGS) $(BASE_CFLAGS) $(CFLAGS) $(PKG_CFLAGS) -MMD -MP -c $< -o $@
 
-$(FONT_OBJECT): $(FONT_FILE) | $(BUILD_DIR)
-	$(LD) -r -b binary $< -o $@
-	$(OBJCOPY) --rename-section .data=.rodata,alloc,load,readonly,data,contents $@
-	$(OBJCOPY) --add-section .note.GNU-stack=/dev/null --set-section-flags .note.GNU-stack=contents,readonly $@
+font-atlas: $(FONT_ATLAS_GENERATOR)
+	$(FONT_ATLAS_GENERATOR) $(FONT_FILE) $(FONT_ATLAS_C) $(FONT_ATLAS_H)
 
-$(TARGET): $(OBJECTS) $(FONT_OBJECT)
-	$(CC) $(CFLAGS) $(OBJECTS) $(FONT_OBJECT) -o $@ $(PKG_LIBS) $(FREETYPE_LIBS)
+$(FONT_ATLAS_GENERATOR): tools/generate_font_atlas.c | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(BASE_CFLAGS) $(CFLAGS) $(GEN_FREETYPE_CFLAGS) $< -o $@ $(GEN_FREETYPE_LIBS)
+
+$(TARGET): $(OBJECTS)
+	$(CC) $(CFLAGS) $(OBJECTS) -o $@ $(PKG_LIBS)
 
 run: $(TARGET)
 	$(TARGET)

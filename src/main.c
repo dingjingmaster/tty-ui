@@ -13,18 +13,15 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include <ft2build.h>
-#include FT_FREETYPE_H
 #include <drm.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
+#include "font_atlas.h"
+
 #define DEFAULT_DRM_DEVICE "/dev/dri/card0"
 #define INPUT_LIMIT 128
 #define BUFFER_COUNT 2
-
-extern const unsigned char _binary_fonts_wqy_microhei_ttc_start[];
-extern const unsigned char _binary_fonts_wqy_microhei_ttc_end[];
 
 struct color {
 	uint8_t r;
@@ -41,11 +38,6 @@ struct drm_buffer {
 	uint8_t *map;
 };
 
-struct text_renderer {
-	FT_Library library;
-	FT_Face face;
-};
-
 struct display {
 	int fd;
 	uint32_t connector_id;
@@ -53,7 +45,6 @@ struct display {
 	drmModeModeInfo mode;
 	drmModeCrtc *old_crtc;
 	struct drm_buffer buffers[BUFFER_COUNT];
-	struct text_renderer text;
 	int width;
 	int height;
 	int front_buffer;
@@ -196,33 +187,21 @@ static void draw_rect_outline(struct canvas *canvas, float x, float y, float wid
 	draw_rect(canvas, x + width - thickness, y, thickness, height, color);
 }
 
-static int init_text_renderer(struct text_renderer *renderer)
+static const struct font_glyph *find_glyph(uint32_t codepoint, int pixel_size)
 {
-	memset(renderer, 0, sizeof(*renderer));
-	if (FT_Init_FreeType(&renderer->library)) {
-		fprintf(stderr, "failed to initialize freetype\n");
-		return -1;
+	const struct font_glyph *fallback = NULL;
+
+	for (size_t i = 0; i < font_glyph_count; i++) {
+		const struct font_glyph *glyph = &font_glyphs[i];
+
+		if ((int)glyph->size != pixel_size)
+			continue;
+		if (glyph->codepoint == codepoint)
+			return glyph;
+		if (glyph->codepoint == '?')
+			fallback = glyph;
 	}
-
-	if (FT_New_Memory_Face(renderer->library,
-			       (const FT_Byte *)_binary_fonts_wqy_microhei_ttc_start,
-			       (FT_Long)(_binary_fonts_wqy_microhei_ttc_end -
-					 _binary_fonts_wqy_microhei_ttc_start),
-			       0, &renderer->face)) {
-		fprintf(stderr, "failed to load embedded font\n");
-		return -1;
-	}
-
-	FT_Select_Charmap(renderer->face, FT_ENCODING_UNICODE);
-	return 0;
-}
-
-static void destroy_text_renderer(struct text_renderer *renderer)
-{
-	if (renderer->face)
-		FT_Done_Face(renderer->face);
-	if (renderer->library)
-		FT_Done_FreeType(renderer->library);
+	return fallback;
 }
 
 static uint32_t utf8_next(const char **cursor)
@@ -290,15 +269,8 @@ static void utf8_trim_last(char *text, size_t *length)
 	*length = i;
 }
 
-static int load_glyph(FT_Face face, uint32_t codepoint)
-{
-	if (!FT_Load_Char(face, (FT_ULong)codepoint, FT_LOAD_RENDER))
-		return 0;
-	return FT_Load_Char(face, '?', FT_LOAD_RENDER);
-}
-
-static int measure_text(struct text_renderer *renderer, const char *text,
-			int pixel_size, struct text_bounds *bounds)
+static int measure_text(const char *text, int pixel_size,
+			struct text_bounds *bounds)
 {
 	const char *cursor = text;
 	int pen_x = 0;
@@ -307,32 +279,28 @@ static int measure_text(struct text_renderer *renderer, const char *text,
 	int min_y = 0;
 	int max_y = 0;
 
-	if (FT_Set_Pixel_Sizes(renderer->face, 0, (FT_UInt)pixel_size))
-		return -1;
-
 	while (*cursor) {
 		uint32_t codepoint = utf8_next(&cursor);
-		FT_GlyphSlot glyph;
+		const struct font_glyph *glyph = find_glyph(codepoint, pixel_size);
 		int gx;
 		int gy;
 
-		if (load_glyph(renderer->face, codepoint))
+		if (!glyph)
 			continue;
 
-		glyph = renderer->face->glyph;
-		gx = pen_x + glyph->bitmap_left;
-		gy = -glyph->bitmap_top;
+		gx = pen_x + glyph->left;
+		gy = -glyph->top;
 
 		if (gx < min_x)
 			min_x = gx;
-		if (gx + (int)glyph->bitmap.width > max_x)
-			max_x = gx + (int)glyph->bitmap.width;
+		if (gx + glyph->width > max_x)
+			max_x = gx + glyph->width;
 		if (gy < min_y)
 			min_y = gy;
-		if (gy + (int)glyph->bitmap.rows > max_y)
-			max_y = gy + (int)glyph->bitmap.rows;
+		if (gy + glyph->height > max_y)
+			max_y = gy + glyph->height;
 
-		pen_x += (int)(glyph->advance.x >> 6);
+		pen_x += glyph->advance;
 		if (pen_x > max_x)
 			max_x = pen_x;
 	}
@@ -348,8 +316,8 @@ static int measure_text(struct text_renderer *renderer, const char *text,
 	return 0;
 }
 
-static int draw_text(struct canvas *canvas, struct text_renderer *renderer,
-		     float fx, float fy, const char *text, int pixel_size,
+static int draw_text(struct canvas *canvas, float fx, float fy, const char *text,
+		     int pixel_size,
 		     struct color color)
 {
 	const char *cursor = text;
@@ -358,9 +326,7 @@ static int draw_text(struct canvas *canvas, struct text_renderer *renderer,
 	int origin_x;
 	int baseline;
 
-	if (measure_text(renderer, text, pixel_size, &bounds))
-		return -1;
-	if (FT_Set_Pixel_Sizes(renderer->face, 0, (FT_UInt)pixel_size))
+	if (measure_text(text, pixel_size, &bounds))
 		return -1;
 
 	origin_x = (int)fx - bounds.min_x;
@@ -368,53 +334,48 @@ static int draw_text(struct canvas *canvas, struct text_renderer *renderer,
 
 	while (*cursor) {
 		uint32_t codepoint = utf8_next(&cursor);
-		FT_GlyphSlot glyph;
-		FT_Bitmap *bitmap;
+		const struct font_glyph *glyph = find_glyph(codepoint, pixel_size);
+		const unsigned char *bitmap;
 		int dst_x;
 		int dst_y;
 
-		if (load_glyph(renderer->face, codepoint))
+		if (!glyph)
 			continue;
+		if ((size_t)glyph->offset +
+			    (size_t)glyph->width * (size_t)glyph->height >
+		    font_bitmap_data_size)
+			return -1;
 
-		glyph = renderer->face->glyph;
-		bitmap = &glyph->bitmap;
-		dst_x = origin_x + pen_x + glyph->bitmap_left;
-		dst_y = baseline - glyph->bitmap_top;
+		bitmap = font_bitmap_data + glyph->offset;
+		dst_x = origin_x + pen_x + glyph->left;
+		dst_y = baseline - glyph->top;
 
-		if (bitmap->pixel_mode == FT_PIXEL_MODE_GRAY) {
-			for (unsigned int y = 0; y < bitmap->rows; y++) {
-				const unsigned char *src_row;
+		for (int y = 0; y < glyph->height; y++) {
+			const unsigned char *src_row =
+				bitmap + (size_t)y * (size_t)glyph->width;
 
-				if (bitmap->pitch >= 0)
-					src_row = bitmap->buffer + y * (unsigned int)bitmap->pitch;
-				else
-					src_row = bitmap->buffer +
-						(bitmap->rows - 1U - y) *
-						(unsigned int)(-bitmap->pitch);
-
-				for (unsigned int x = 0; x < bitmap->width; x++)
-					blend_pixel(canvas, dst_x + (int)x, dst_y + (int)y,
-						    color, src_row[x]);
-			}
+			for (int x = 0; x < glyph->width; x++)
+				blend_pixel(canvas, dst_x + x, dst_y + y,
+					    color, src_row[x]);
 		}
 
-		pen_x += (int)(glyph->advance.x >> 6);
+		pen_x += glyph->advance;
 	}
 
 	return 0;
 }
 
-static int draw_text_centered(struct canvas *canvas, struct text_renderer *renderer,
-			      const char *text, int pixel_size, float center_x,
+static int draw_text_centered(struct canvas *canvas, const char *text,
+			      int pixel_size, float center_x,
 			      float y, struct color color)
 {
 	struct text_bounds bounds;
 
-	if (measure_text(renderer, text, pixel_size, &bounds))
+	if (measure_text(text, pixel_size, &bounds))
 		return -1;
 
-	return draw_text(canvas, renderer, center_x - (float)bounds.width / 2.0f,
-			 y, text, pixel_size, color);
+	return draw_text(canvas, center_x - (float)bounds.width / 2.0f, y, text,
+			 pixel_size, color);
 }
 
 static uint32_t find_crtc_for_encoder(const drmModeRes *resources,
@@ -690,13 +651,10 @@ static int display_init(struct display *display, const char *device)
 		if (create_dumb_buffer(display, &display->buffers[i]))
 			goto fail;
 	}
-	if (init_text_renderer(&display->text))
-		goto fail;
 
 	return 0;
 
 fail:
-	destroy_text_renderer(&display->text);
 	for (int i = 0; i < BUFFER_COUNT; i++)
 		destroy_dumb_buffer(display, &display->buffers[i]);
 	if (display->old_crtc)
@@ -715,7 +673,6 @@ static void display_destroy(struct display *display)
 			       &display->old_crtc->mode);
 	}
 
-	destroy_text_renderer(&display->text);
 	for (int i = 0; i < BUFFER_COUNT; i++)
 		destroy_dumb_buffer(display, &display->buffers[i]);
 	if (display->old_crtc)
@@ -747,8 +704,8 @@ static void make_password_mask(const struct ui_state *state, char *out,
 		out[n] = '\0';
 }
 
-static void draw_input(struct canvas *canvas, struct text_renderer *text,
-		       float x, float y, float width, float height,
+static void draw_input(struct canvas *canvas, float x, float y, float width,
+		       float height,
 		       const char *value, bool focused)
 {
 	struct color input_bg = rgb(19, 23, 27);
@@ -762,10 +719,10 @@ static void draw_input(struct canvas *canvas, struct text_renderer *text,
 	draw_rect_outline(canvas, x, y, width, height, focused ? 3.0f : 2.0f,
 			  border);
 
-	measure_text(text, value, 22, &bounds);
+	measure_text(value, 22, &bounds);
 	text_y = y + (height - (float)bounds.height) / 2.0f;
 	if (value[0])
-		draw_text(canvas, text, text_x, text_y, value, 22, text_color);
+		draw_text(canvas, text_x, text_y, value, 22, text_color);
 	if (focused) {
 		float cursor_x = text_x + (float)bounds.width + 3.0f;
 		draw_rect(canvas, cursor_x, y + 9.0f, 2.0f, height - 18.0f,
@@ -773,8 +730,8 @@ static void draw_input(struct canvas *canvas, struct text_renderer *text,
 	}
 }
 
-static void draw_button(struct canvas *canvas, struct text_renderer *text,
-			float x, float y, float width, float height,
+static void draw_button(struct canvas *canvas, float x, float y, float width,
+			float height,
 			const char *label, bool focused)
 {
 	struct color bg = focused ? rgb(33, 87, 99) : rgb(31, 38, 43);
@@ -785,8 +742,8 @@ static void draw_button(struct canvas *canvas, struct text_renderer *text,
 	draw_rect(canvas, x, y, width, height, bg);
 	draw_rect_outline(canvas, x, y, width, height, focused ? 3.0f : 2.0f,
 			  border);
-	measure_text(text, label, 22, &bounds);
-	draw_text(canvas, text, x + (width - (float)bounds.width) / 2.0f,
+	measure_text(label, 22, &bounds);
+	draw_text(canvas, x + (width - (float)bounds.width) / 2.0f,
 		  y + (height - (float)bounds.height) / 2.0f, label, 22, fg);
 }
 
@@ -794,7 +751,6 @@ static void render_ui(struct display *display, int buffer_index,
 		      const struct ui_state *state)
 {
 	struct canvas canvas = canvas_for_buffer(display, buffer_index);
-	struct text_renderer *text = &display->text;
 	const float w = (float)display->width;
 	const float h = (float)display->height;
 	const float margin = clampf(w * 0.045f, 28.0f, 72.0f);
@@ -826,38 +782,38 @@ static void render_ui(struct display *display, int buffer_index,
 		  w - margin * 2.0f - 4.0f, header_h - 2.0f, rgb(18, 22, 26));
 	draw_rect(&canvas, margin, margin + header_h, w - margin * 2.0f,
 		  2.0f, rgb(87, 102, 110));
-	draw_text(&canvas, text, margin + 34.0f, margin + 27.0f, "安得合众", 28,
+	draw_text(&canvas, margin + 34.0f, margin + 27.0f, "安得合众", 28,
 		  rgb(235, 245, 245));
 
-	draw_text_centered(&canvas, text, "DiskCrypt登录", 34, center_x, title_y,
+	draw_text_centered(&canvas, "DiskCrypt登录", 34, center_x, title_y,
 			   rgb(235, 245, 245));
-	draw_text_centered(&canvas, text, "用 Tab 切换区域，Enter键确认", 22,
+	draw_text_centered(&canvas, "用 Tab 切换区域，Enter键确认", 22,
 			   center_x, title_y + 58.0f, rgb(171, 191, 194));
 
-	measure_text(text, "用户名称:", 22, &label_bounds);
-	draw_text(&canvas, text, form_x + label_w - (float)label_bounds.width,
+	measure_text("用户名称:", 22, &label_bounds);
+	draw_text(&canvas, form_x + label_w - (float)label_bounds.width,
 		  user_y + (row_h - (float)label_bounds.height) / 2.0f,
 		  "用户名称:", 22, rgb(235, 245, 245));
-	draw_input(&canvas, text, input_x, user_y, input_w, row_h, state->username,
+	draw_input(&canvas, input_x, user_y, input_w, row_h, state->username,
 		   state->focus == FOCUS_USER);
 
 	make_password_mask(state, mask, sizeof(mask));
-	measure_text(text, "用户密码:", 22, &label_bounds);
-	draw_text(&canvas, text, form_x + label_w - (float)label_bounds.width,
+	measure_text("用户密码:", 22, &label_bounds);
+	draw_text(&canvas, form_x + label_w - (float)label_bounds.width,
 		  pass_y + (row_h - (float)label_bounds.height) / 2.0f,
 		  "用户密码:", 22, rgb(235, 245, 245));
-	draw_input(&canvas, text, input_x, pass_y, input_w, row_h, mask,
+	draw_input(&canvas, input_x, pass_y, input_w, row_h, mask,
 		   state->focus == FOCUS_PASSWORD);
 
-	draw_button(&canvas, text, continue_button_x, button_y, button_w, button_h,
+	draw_button(&canvas, continue_button_x, button_y, button_w, button_h,
 		    "继续启动", state->focus == FOCUS_CONTINUE);
-	draw_button(&canvas, text, exit_button_x, button_y, button_w, button_h,
+	draw_button(&canvas, exit_button_x, button_y, button_w, button_h,
 		    "退出", state->focus == FOCUS_EXIT);
 
 	draw_rect(&canvas, margin + 1.0f, h - margin - 78.0f,
 		  w - margin * 2.0f - 2.0f, 1.0f, rgb(46, 56, 59));
-	measure_text(text, "全盘加密  安全无忧", 24, &tagline_bounds);
-	draw_text(&canvas, text, w - margin - 32.0f - (float)tagline_bounds.width,
+	measure_text("全盘加密  安全无忧", 24, &tagline_bounds);
+	draw_text(&canvas, w - margin - 32.0f - (float)tagline_bounds.width,
 		  h - margin - 48.0f - (float)tagline_bounds.height,
 		  "全盘加密  安全无忧", 24, rgb(179, 224, 171));
 }
@@ -1023,7 +979,7 @@ static void usage(const char *program)
 		"\n"
 		"Options:\n"
 		"  -D device   DRM device, default " DEFAULT_DRM_DEVICE "\n"
-		"              Font is embedded from fonts/wqy-microhei.ttc\n"
+		"              Text uses a built-in bitmap glyph atlas\n"
 		"  -h          show this help\n",
 		program);
 }

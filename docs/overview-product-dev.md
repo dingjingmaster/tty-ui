@@ -3,7 +3,7 @@
 > 文档元数据
 > - 文档版本：v1.0.0
 > - 最后更新：2026-05-27
-> - 更新来源：docs/dev/1-task-diskcrypt-kms-ui.md、docs/dev/4-task-embed-font-static-freetype.md、docs/dev/5-task-trim-runtime-deps.md、docs/dev/6-summary-drm-dumb-buffer.md
+> - 更新来源：docs/dev/1-task-diskcrypt-kms-ui.md、docs/dev/4-task-embed-font-static-freetype.md、docs/dev/5-task-trim-runtime-deps.md、docs/dev/6-summary-drm-dumb-buffer.md、docs/dev/7-summary-embedded-bitmap-font.md
 > - 关联产品文档：docs/overview-product.md
 
 ## 1. 技术栈
@@ -14,18 +14,18 @@
 | 构建系统 | Make + pkg-config | 本地构建 | 产物为 `build/tty-ui` |
 | 运行平台 | Linux DRM/KMS | 无 GUI 图形输出 | 需要 `/dev/dri/card*` 与 DRM master |
 | 关键依赖 | libdrm | DRM/KMS 模式设置、dumb buffer、page flip | 运行时不再依赖 GBM/EGL/GLES |
-| 关键依赖 | FreeType | 中文/英文文字栅格化 | 构建优先链接 `libfreetype.a`，运行时不依赖 `libfreetype.so` |
-| 内嵌资源 | `fonts/wqy-microhei.ttc` | 默认中文字体 | 通过 linker binary object 打包进 `build/tty-ui` |
+| 内嵌资源 | `src/font_atlas.c`、`src/font_atlas.h` | 中文/英文位图字形表 | 默认构建直接编译进 `build/tty-ui` |
+| 开发工具 | `tools/generate_font_atlas.c` | 从 `fonts/wqy-microhei.ttc` 重新生成字形表 | 仅运行 `make font-atlas` 时需要 `freetype2` |
 | 运行依赖 | libdrm、libc | 主程序直接动态依赖 | `ld-linux`/`linux-vdso` 为基础 ELF 运行环境 |
 
 ## 2. 架构边界
 
-- 模块划分：当前为单文件最小实现，内部按 DRM/KMS、dumb buffer、CPU 绘制、字体渲染、键盘输入分区。
+- 模块划分：当前主程序按 DRM/KMS、dumb buffer、CPU 绘制、位图字形绘制、键盘输入分区。
 - 进程/线程/内核边界：单进程单线程；通过 libdrm 调用内核 DRM/KMS；不创建后台线程。
 - 客户端/服务端/驱动边界：程序作为 DRM client 直接提交 CRTC mode set 和 page flip。
 - 数据流：键盘输入更新内存中的 UI 状态；UI 状态由 CPU 写入 mmap 后的 XRGB8888 dumb buffer；buffer 交给 KMS 显示。
 - 控制流：初始化 DRM/KMS 和 dumb buffer -> CPU 渲染首帧 -> 等待键盘事件 -> 状态变化后重绘并 page flip -> 退出时尝试恢复旧 CRTC。
-- 外部依赖：DRM 设备；字体已打包进二进制。
+- 外部依赖：DRM 设备；位图字形表已打包进二进制。
 
 ## 3. 关键接口
 
@@ -36,7 +36,7 @@
 
 ## 4. 数据与配置
 
-- 核心数据结构：`display` 管理 DRM/KMS、dumb buffer 和 FreeType 资源；`ui_state` 管理用户名、密码和焦点。
+- 核心数据结构：`display` 管理 DRM/KMS 和 dumb buffer；`ui_state` 管理用户名、密码和焦点；`font_glyph` 描述内嵌位图字形。
 - 配置文件/参数：无配置文件；命令行参数为 `-D`。
 - 持久化数据：无。
 - 迁移/兼容规则：无历史数据迁移。
@@ -46,16 +46,15 @@
 
 | 风险区域 | 关注点 | 验证方式 | 关联文档 |
 |----------|--------|----------|----------|
-| 内存/生命周期 | DRM FB、dumb buffer mmap、FreeType face 的释放顺序 | 构建检查、人工审查错误路径 | docs/dev/6-summary-drm-dumb-buffer.md |
+| 内存/生命周期 | DRM FB、dumb buffer mmap、字形 bitmap 边界检查 | 构建检查、人工审查错误路径 | docs/dev/7-summary-embedded-bitmap-font.md |
 | 权限/系统调用 | 打开 DRM 设备、设置 CRTC、page flip | 不在桌面会话实机运行；README 说明运行前提 | docs/dev/1-task-diskcrypt-kms-ui.md |
-| 构建链接 | libdrm、内嵌字体对象、FreeType 静态链接参数、可选压缩/PNG 路径 stub | `make`、`ldd build/tty-ui`、`readelf -d build/tty-ui` | docs/dev/6-summary-drm-dumb-buffer.md |
+| 构建链接 | libdrm、内嵌位图字形表、可选开发期字形生成器 | `make`、`ldd build/tty-ui`、`readelf -d build/tty-ui` | docs/dev/7-summary-embedded-bitmap-font.md |
 
 ## 6. 构建与验证
 
 - 构建命令：`make`
-- 字体打包：`make` 使用 `ld -r -b binary` 将 `fonts/wqy-microhei.ttc` 转为目标文件并链接进程序。
-- FreeType 链接：优先链接 `pkg-config --variable=libdir freetype2` 下的 `libfreetype.a`；如果构建机缺少静态库则回退到 `pkg-config --libs freetype2`。
-- FreeType 可选路径：当前内嵌 TTC 字体不需要 PNG embedded bitmap、gzip/bzip stream 或 WOFF2/Brotli；`src/freetype_optional_stubs.c` 让这些可选路径返回失败，以减少运行时动态库。
+- 字形打包：`make` 直接编译已生成的 `src/font_atlas.c`，默认构建不依赖 `freetype2` 或 `libfreetype.a`。
+- 字形生成：更换字体、文案或字号时运行 `make font-atlas`，该开发期目标使用 `tools/generate_font_atlas.c` 和 `freetype2` 重新生成 `src/font_atlas.c`/`src/font_atlas.h`。
 - 单元测试：暂无。
 - 集成验证：需在真实 TTY/initramfs 或可获取 DRM master 的测试机运行 `build/tty-ui -D /dev/dri/card0`。
 - 静态检查：当前使用 `git diff --check` 做补丁格式检查。
@@ -65,7 +64,7 @@
 ## 7. 发布与回滚
 
 - 产物：`build/tty-ui`
-- 安装/部署方式：当前未提供安装目标；集成方可复制二进制到 initramfs，字体已随二进制内嵌。
+- 安装/部署方式：当前未提供安装目标；集成方可复制二进制到 initramfs，位图字形表已随二进制内嵌。
 - 配置变更：无。
 - 升级步骤：重新构建并替换二进制。
 - 回滚步骤：回退代码或替换回旧二进制。
@@ -94,3 +93,4 @@
 | 2026-05-27 | 内嵌默认字体，移除 Fontconfig/`-f`，优先静态链接 FreeType | 降低 initramfs 运行时依赖 | docs/dev/4-task-embed-font-static-freetype.md |
 | 2026-05-27 | 禁用 FreeType 可选压缩/PNG 路径 | 移除 `libbz2`、`libpng16`、`libz`、`libbrotli*` 运行时依赖 | docs/dev/5-task-trim-runtime-deps.md |
 | 2026-05-27 | 从 GBM/EGL/GLES 切换到 DRM dumb buffer + CPU 绘制 | 运行依赖收敛到 `libdrm` 和 `libc` | docs/dev/6-summary-drm-dumb-buffer.md |
+| 2026-05-27 | 改为内嵌位图字形表 | 默认构建和主程序不再依赖 `libfreetype.a` | docs/dev/7-summary-embedded-bitmap-font.md |
